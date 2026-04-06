@@ -206,11 +206,19 @@ async function generateBriefPDF(
     if (order.clientPhone) row('Téléphone', order.clientPhone)
 
     // ── Section 3 : Entreprise ──────────────────────────────
-    if (order.companyName || order.sector) {
+    if (order.companyName || order.sector || order.vatNumber || order.website) {
       section('Entreprise')
       if (order.companyName)  row("Nom de l'entreprise", order.companyName)
       if (order.companyEmail) row('Email entreprise',    order.companyEmail)
       if (order.sector)       row("Secteur d'activité",  order.sector)
+      if (order.vatNumber)    row('Numéro TVA',           order.vatNumber)
+      if (order.website)      row('Site web',             order.website)
+    }
+    if (order.instagram || order.facebook || order.tiktok) {
+      section('Présence en ligne')
+      if (order.instagram) row('Instagram', order.instagram)
+      if (order.facebook)  row('Facebook',  order.facebook)
+      if (order.tiktok)    row('TikTok',    order.tiktok)
     }
 
     // ── Section 4 : Projet ──────────────────────────────────
@@ -313,6 +321,11 @@ export async function POST(req: NextRequest) {
     const companyName     = sanitize(body.companyName, MAX_FIELD_LEN)
     const companyEmail    = sanitize(body.companyEmail, 254)
     const sector          = sanitize(body.sector, MAX_FIELD_LEN)
+    const vatNumber       = sanitize(body.vatNumber, 50)
+    const website         = sanitize(body.website, MAX_FIELD_LEN)
+    const instagram       = sanitize(body.instagram, 100)
+    const facebook        = sanitize(body.facebook, 100)
+    const tiktok          = sanitize(body.tiktok, 100)
     const brief           = sanitize(body.brief, MAX_BRIEF_LEN)
     const objectives      = sanitize(body.objectives, MAX_BRIEF_LEN)
     const requiredAccess  = sanitize(body.requiredAccess, MAX_BRIEF_LEN)
@@ -376,6 +389,7 @@ export async function POST(req: NextRequest) {
         ref, service, price,
         clientName, clientEmail, clientPhone,
         companyName, companyEmail, sector,
+        vatNumber, website, instagram, facebook, tiktok,
         brief, objectives, requiredAccess,
         franchiseeName: franchiseeName || 'Franchisé',
       },
@@ -453,7 +467,13 @@ export async function POST(req: NextRequest) {
           ${companyName ? `
           <div style="margin-bottom:20px;">
             <div style="font-size:10px;font-weight:700;color:#4A5180;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">Entreprise</div>
-            <div style="font-size:14px;color:#C8CFEE;">${escapeHtml(companyName)}${sector ? ' &nbsp;·&nbsp; ' + escapeHtml(sector) : ''}${companyEmail ? '<br><span style="font-size:12px;color:#8B95C4;">' + escapeHtml(companyEmail) + '</span>' : ''}</div>
+            <div style="font-size:14px;color:#C8CFEE;">${escapeHtml(companyName)}${sector ? ' &nbsp;·&nbsp; ' + escapeHtml(sector) : ''}${companyEmail ? '<br><span style="font-size:12px;color:#8B95C4;">' + escapeHtml(companyEmail) + '</span>' : ''}${vatNumber ? '<br><span style="font-size:12px;color:#8B95C4;">TVA : ' + escapeHtml(vatNumber) + '</span>' : ''}${website ? '<br><span style="font-size:12px;color:#6AAEE5;">' + escapeHtml(website) + '</span>' : ''}</div>
+          </div>` : ''}
+
+          ${(instagram || facebook || tiktok) ? `
+          <div style="margin-bottom:20px;">
+            <div style="font-size:10px;font-weight:700;color:#4A5180;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">Présence en ligne</div>
+            <div style="font-size:13px;color:#C8CFEE;">${[instagram ? '📷 ' + escapeHtml(instagram) : '', facebook ? '👤 ' + escapeHtml(facebook) : '', tiktok ? '▶️ ' + escapeHtml(tiktok) : ''].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>
           </div>` : ''}
 
           <!-- Brief -->

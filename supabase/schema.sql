@@ -41,6 +41,11 @@ create table if not exists public.orders (
   company_name      text,
   company_email     text,
   sector            text,
+  vat_number        text,
+  website           text,
+  instagram         text,
+  facebook          text,
+  tiktok            text,
 
   -- Projet
   brief             text,

@@ -14,6 +14,11 @@ export interface LocalOrder {
   company_name?:   string
   company_email?:  string
   sector?:         string
+  vat_number?:     string
+  website?:        string
+  instagram?:      string
+  facebook?:       string
+  tiktok?:         string
   // Projet
   service:         string
   brief?:          string
