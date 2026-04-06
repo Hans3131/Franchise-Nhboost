@@ -110,17 +110,17 @@ function StepIndicator({ step, current }: { step: typeof STEPS[0]; current: numb
     <div className="flex items-center gap-2.5">
       <div className={cn(
         'flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-300 flex-shrink-0',
-        done   ? 'bg-white/90 border-white' :
-        active ? 'bg-white border-white shadow-[0_2px_8px_rgba(45,45,96,0.2)]' :
-                 'bg-white/25 border-white/50'
+        done   ? 'bg-[#2d2d60]/15 border-[#2d2d60]' :
+        active ? 'bg-[#2d2d60] border-[#2d2d60] shadow-[0_2px_8px_rgba(45,45,96,0.25)]' :
+                 'bg-white/40 border-[#2d2d60]/30'
       )}>
         {done
           ? <Check className="w-3.5 h-3.5 text-[#2d2d60]" strokeWidth={2.5} />
-          : <Icon className={cn('w-3.5 h-3.5', active ? 'text-[#2d2d60]' : 'text-white/70')} strokeWidth={1.75} />}
+          : <Icon className={cn('w-3.5 h-3.5', active ? 'text-white' : 'text-[#2d2d60]/50')} strokeWidth={1.75} />}
       </div>
       <span className={cn(
         'text-sm font-medium hidden md:block transition-colors',
-        done ? 'text-white font-semibold' : active ? 'text-white font-semibold' : 'text-white/60'
+        done ? 'text-[#2d2d60] font-semibold' : active ? 'text-[#2d2d60] font-semibold' : 'text-[#2d2d60]/50'
       )}>
         {step.label}
       </span>
@@ -131,11 +131,11 @@ function StepIndicator({ step, current }: { step: typeof STEPS[0]; current: numb
 function FieldWrapper({ label, error, required, children }: { label: string; error?: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-[12px] font-semibold text-white/80 uppercase tracking-widest">
-        {label}{required && <span className="text-red-200 ml-0.5">*</span>}
+      <label className="block text-[12px] font-semibold text-[#2d2d60] uppercase tracking-widest">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
-      {error && <p className="text-[11px] text-red-200 mt-1">{error}</p>}
+      {error && <p className="text-[11px] text-red-600 mt-1">{error}</p>}
     </div>
   )
 }
@@ -380,7 +380,7 @@ export default function CommanderPage() {
               <StepIndicator step={step} current={current} />
               {i < STEPS.length - 1 && (
                 <div className={cn('h-px w-6 md:w-10 transition-all duration-500 flex-shrink-0',
-                  step.id < current ? 'bg-white/80' : 'bg-white/25')} />
+                  step.id < current ? 'bg-[#2d2d60]/30' : 'bg-[#2d2d60]/15')} />
               )}
             </div>
           ))}
@@ -405,7 +405,7 @@ export default function CommanderPage() {
 
                 {/* Bloc client */}
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/75 mb-3 flex items-center gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#2d2d60] mb-3 flex items-center gap-2">
                     <User className="w-3.5 h-3.5" /> Contact client
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -443,7 +443,7 @@ export default function CommanderPage() {
 
                 {/* Bloc entreprise */}
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/75 mb-3 flex items-center gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#2d2d60] mb-3 flex items-center gap-2">
                     <Building2 className="w-3.5 h-3.5" /> Entreprise
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -483,9 +483,9 @@ export default function CommanderPage() {
 
                 {/* Bloc présence en ligne */}
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-white/75 mb-3 flex items-center gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#2d2d60] mb-3 flex items-center gap-2">
                     <Globe className="w-3.5 h-3.5" /> Présence en ligne
-                    <span className="ml-1 text-[10px] font-medium text-white/50 normal-case tracking-normal">(facultatif)</span>
+                    <span className="ml-1 text-[10px] font-medium text-[#2d2d60]/50 normal-case tracking-normal">(facultatif)</span>
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -836,13 +836,13 @@ Compte Google Search Console`}
 // ─── Helpers ──────────────────────────────────────────────────
 function StepHeader({ icon: Icon, color, title, subtitle }: { icon: React.ElementType; color: string; title: string; subtitle: string }) {
   return (
-    <div className="flex items-start gap-4 pb-2 border-b border-white/20">
-      <div className="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-white/25">
-        <Icon className="w-5 h-5 text-white" strokeWidth={1.75} />
+    <div className="flex items-start gap-4 pb-2 border-b border-[#2d2d60]/15">
+      <div className="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-[#2d2d60]/10">
+        <Icon className="w-5 h-5 text-[#2d2d60]" strokeWidth={1.75} />
       </div>
       <div>
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <p className="text-sm text-white/70">{subtitle}</p>
+        <h2 className="text-lg font-semibold text-[#2d2d60]">{title}</h2>
+        <p className="text-sm text-[#2d2d60]/60">{subtitle}</p>
       </div>
     </div>
   )
@@ -853,9 +853,9 @@ function NavButtons({ onNext, onPrev, nextDisabled, nextLabel = 'Continuer', dis
   nextLabel?: string; disablePrev?: boolean; hideNext?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between pt-4 border-t border-white/20">
+    <div className="flex items-center justify-between pt-4 border-t border-[#2d2d60]/15">
       <button onClick={onPrev} disabled={disablePrev}
-        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium text-white/80 hover:text-white hover:bg-white/15 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium text-[#2d2d60]/70 hover:text-[#2d2d60] hover:bg-[#2d2d60]/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
         <ChevronLeft className="w-4 h-4" /> Retour
       </button>
       {!hideNext && (
