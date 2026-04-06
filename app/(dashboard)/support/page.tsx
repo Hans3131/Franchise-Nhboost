@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getAll as ticketGetAll, insert as ticketInsert } from '@/lib/ticketStore'
+import { getAll as orderGetAll } from '@/lib/orderStore'
 import { insert as notifInsert } from '@/lib/notificationStore'
 import { createClient } from '@/lib/supabase/client'
 import { z } from 'zod'
@@ -11,17 +12,21 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   HeadphonesIcon, MessageSquare, Mail, ChevronDown,
   CheckCircle2, Send, Clock, AlertCircle,
-  ExternalLink, Phone, ChevronRight, HelpCircle,
+  ExternalLink, Phone, ChevronRight, HelpCircle, Briefcase,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── Schema ───────────────────────────────────────────────────
 const ticketSchema = z.object({
-  subject: z.string().min(5, 'Sujet requis (min. 5 caractères)'),
-  message: z.string().min(20, 'Message requis (min. 20 caractères)'),
+  orderId:  z.string().min(1, 'Veuillez sélectionner le projet concerné'),
+  subject:  z.string().min(5, 'Sujet requis (min. 5 caractères)'),
+  message:  z.string().min(20, 'Message requis (min. 20 caractères)'),
   priority: z.enum(['low', 'medium', 'high']),
 })
 type TicketForm = z.infer<typeof ticketSchema>
+
+// ─── Types ────────────────────────────────────────────────────
+interface OrderOption { id: string; label: string }
 
 // ─── Data ─────────────────────────────────────────────────────
 const FAQ = [
@@ -74,12 +79,14 @@ const SUPPORT_WHATSAPP = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP ?? '+336000000
 
 // ─── Component ────────────────────────────────────────────────
 export default function SupportPage() {
-  const [openFaq, setOpenFaq]     = useState<number | null>(null)
-  const [submitted, setSubmitted] = useState(false)
-  const [tickets, setTickets]     = useState<TicketRow[]>([])
+  const [openFaq, setOpenFaq]       = useState<number | null>(null)
+  const [submitted, setSubmitted]   = useState(false)
+  const [tickets, setTickets]       = useState<TicketRow[]>([])
+  const [orders, setOrders]         = useState<OrderOption[]>([])
+  const [ordersLoading, setOrdersLoading] = useState(true)
 
   useEffect(() => {
-    // Affichage immédiat localStorage
+    // ── Tickets : affichage immédiat localStorage ──────────────
     const mapTicket = (r: { ref?: string; id?: string; subject: string; status: string; priority: string; created_at: string }) => ({
       id:       r.ref ?? String(r.id),
       subject:  r.subject,
@@ -89,10 +96,24 @@ export default function SupportPage() {
     })
     setTickets(ticketGetAll().slice(0, 10).map(mapTicket))
 
-    // Remplacement par Supabase
+    // ── Commandes : affichage immédiat localStorage ────────────
+    const mapOrder = (o: Record<string, unknown>): OrderOption => {
+      const company = String(o.company_name ?? o.companyName ?? '')
+      const client  = String(o.client_name  ?? o.client      ?? '')
+      const service = String(o.service ?? '')
+      const name    = company || client || 'Client'
+      return { id: String(o.id), label: `${name} — ${service}` }
+    }
+    const localOrders = orderGetAll().map(o => mapOrder(o as unknown as Record<string, unknown>))
+    setOrders(localOrders)
+    setOrdersLoading(false)
+
+    // ── Supabase ───────────────────────────────────────────────
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
+
+      // Tickets
       supabase.from('support_tickets').select('*').eq('user_id', user.id)
         .order('created_at', { ascending: false }).limit(10)
         .then(({ data, error }) => {
@@ -103,12 +124,24 @@ export default function SupportPage() {
             })))
           }
         })
+
+      // Commandes
+      supabase.from('orders')
+        .select('id, service, company_name, client_name')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .then(({ data, error }) => {
+          if (!error && data) {
+            setOrders(data.map(o => mapOrder(o as Record<string, unknown>)))
+          }
+          setOrdersLoading(false)
+        })
     })
   }, [])
 
   const { register, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<TicketForm>({
     resolver: zodResolver(ticketSchema),
-    defaultValues: { priority: 'medium' },
+    defaultValues: { priority: 'medium', orderId: '' },
   })
 
   const onSubmit = handleSubmit(async (data) => {
@@ -135,6 +168,7 @@ export default function SupportPage() {
       if (user) {
         await supabase.from('support_tickets').insert({
           user_id:  user.id,
+          order_id: data.orderId || null,
           subject:  data.subject,
           message:  data.message,
           priority: data.priority,
@@ -149,6 +183,8 @@ export default function SupportPage() {
           subject:     data.subject,
           message:     data.message,
           priority:    data.priority,
+          orderId:     data.orderId,
+          orderLabel:  orders.find(o => o.id === data.orderId)?.label ?? '',
           senderEmail: user?.email ?? '',
         }),
       })
@@ -258,6 +294,52 @@ export default function SupportPage() {
             </div>
 
             <form onSubmit={onSubmit} className="p-6 space-y-4">
+
+              {/* Projet concerné */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-widest text-[#8B95C4] flex items-center gap-1.5">
+                  <Briefcase className="w-3 h-3" />
+                  Projet concerné *
+                </label>
+
+                {ordersLoading ? (
+                  // Skeleton
+                  <div className="w-full h-11 rounded-xl bg-[#1D2240] border border-[rgba(107,174,229,0.15)] animate-pulse" />
+                ) : orders.length === 0 ? (
+                  // Empty state
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1D2240] border border-[rgba(107,174,229,0.15)]">
+                    <Briefcase className="w-4 h-4 text-[#4A5180] flex-shrink-0" />
+                    <p className="text-[13px] text-[#4A5180]">Aucun projet disponible pour créer un ticket</p>
+                  </div>
+                ) : (
+                  // Select
+                  <div className="relative">
+                    <select
+                      {...register('orderId')}
+                      className={cn(
+                        inputCls(!!errors.orderId),
+                        'appearance-none pr-10 cursor-pointer',
+                        // Couleur du placeholder quand valeur vide
+                        !watch('orderId') && 'text-[#4A5180]',
+                      )}
+                      style={{ colorScheme: 'dark' }}
+                    >
+                      <option value="" disabled>Sélectionner le projet concerné</option>
+                      {orders.map(o => (
+                        <option key={o.id} value={o.id} className="text-[#F0F2FF] bg-[#1D2240]">
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A5180] pointer-events-none" />
+                  </div>
+                )}
+
+                {errors.orderId && (
+                  <p className="text-[11px] text-red-400">{errors.orderId.message}</p>
+                )}
+              </div>
+
               {/* Subject */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-widest text-[#8B95C4]">Sujet *</label>

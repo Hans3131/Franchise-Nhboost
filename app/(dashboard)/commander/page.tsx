@@ -10,7 +10,7 @@ import {
   Upload, CreditCard, CheckCircle2, ChevronRight,
   ChevronLeft, Globe, Search, BarChart2, Palette,
   Share2, PenTool, Megaphone, X, Check, Zap, Loader2,
-  Building2, Mail, Phone, Target, Key,
+  Building2, Mail, Phone, Target, Key, Hash, AtSign, Users, Play,
 } from 'lucide-react'
 import { insert as storeInsert } from '@/lib/orderStore'
 import { insert as notifInsert } from '@/lib/notificationStore'
@@ -34,6 +34,12 @@ interface FormData {
   companyName:    string
   companyEmail:   string
   sector:         string
+  // Présence en ligne
+  vatNumber:      string
+  website:        string
+  instagram:      string
+  facebook:       string
+  tiktok:         string
   // Service
   serviceId:      string
   // Projet
@@ -81,6 +87,12 @@ const step1Schema = z.object({
   companyName:  z.string().min(2, 'Nom entreprise requis (min. 2 caractères)'),
   companyEmail: z.string().email('Email entreprise invalide').optional().or(z.literal('')),
   sector:       z.string().optional(),
+  // Présence en ligne — tous facultatifs
+  vatNumber:    z.string().optional().or(z.literal('')),
+  website:      z.string().url('URL invalide (ex: https://mon-site.com)').optional().or(z.literal('')),
+  instagram:    z.string().optional().or(z.literal('')),
+  facebook:     z.string().optional().or(z.literal('')),
+  tiktok:       z.string().optional().or(z.literal('')),
 })
 
 const step3Schema = z.object({
@@ -452,6 +464,73 @@ export default function CommanderPage() {
                   </div>
                 </div>
 
+                <div className="h-px bg-[rgba(107,174,229,0.08)]" />
+
+                {/* Bloc présence en ligne */}
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#4A5180] mb-3 flex items-center gap-2">
+                    <Globe className="w-3.5 h-3.5" /> Présence en ligne
+                    <span className="ml-1 text-[10px] font-medium text-[#4A5180] normal-case tracking-normal opacity-70">(facultatif)</span>
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    {/* Numéro TVA */}
+                    <FieldWrapper label="Numéro TVA" error={form1.formState.errors.vatNumber?.message}>
+                      <InputWithIcon
+                        icon={Hash}
+                        {...form1.register('vatNumber')}
+                        className={inputCls(!!form1.formState.errors.vatNumber)}
+                        placeholder="FR 00 000 000 000"
+                      />
+                    </FieldWrapper>
+
+                    {/* Site web */}
+                    <FieldWrapper label="Site web" error={form1.formState.errors.website?.message}>
+                      <InputWithIcon
+                        icon={Globe}
+                        type="url"
+                        {...form1.register('website')}
+                        className={inputCls(!!form1.formState.errors.website)}
+                        placeholder="https://mon-site.com"
+                      />
+                    </FieldWrapper>
+                  </div>
+
+                  {/* Réseaux sociaux */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+
+                    {/* Instagram */}
+                    <FieldWrapper label="Instagram" error={form1.formState.errors.instagram?.message}>
+                      <InputWithIcon
+                        icon={AtSign}
+                        {...form1.register('instagram')}
+                        className={inputCls()}
+                        placeholder="@mon_compte"
+                      />
+                    </FieldWrapper>
+
+                    {/* Facebook */}
+                    <FieldWrapper label="Facebook" error={form1.formState.errors.facebook?.message}>
+                      <InputWithIcon
+                        icon={Users}
+                        {...form1.register('facebook')}
+                        className={inputCls()}
+                        placeholder="facebook.com/ma-page"
+                      />
+                    </FieldWrapper>
+
+                    {/* TikTok */}
+                    <FieldWrapper label="TikTok" error={form1.formState.errors.tiktok?.message}>
+                      <InputWithIcon
+                        icon={Play}
+                        {...form1.register('tiktok')}
+                        className={inputCls()}
+                        placeholder="@mon_tiktok"
+                      />
+                    </FieldWrapper>
+                  </div>
+                </div>
+
                 <NavButtons onNext={handleStep1} disablePrev />
               </div>
             )}
@@ -657,7 +736,20 @@ Compte Google Search Console`}
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#4A5180] pb-1 mb-1">Entreprise</p>
                   <SummaryRow label="Nom entreprise"   value={data.companyName  ?? '—'} />
                   {data.companyEmail && <SummaryRow label="Email entreprise" value={data.companyEmail} />}
-                  {data.sector && <SummaryRow label="Secteur" value={data.sector} />}
+                  {data.sector      && <SummaryRow label="Secteur"           value={data.sector} />}
+                  {data.vatNumber   && <SummaryRow label="N° TVA"            value={data.vatNumber} />}
+
+                  {/* Présence en ligne */}
+                  {(data.website || data.instagram || data.facebook || data.tiktok) && (
+                    <>
+                      <div className="h-px bg-[rgba(107,174,229,0.08)] my-2" />
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#4A5180] pb-1 mb-1">Présence en ligne</p>
+                      {data.website   && <SummaryRow label="Site web"   value={data.website} />}
+                      {data.instagram && <SummaryRow label="Instagram"  value={data.instagram} />}
+                      {data.facebook  && <SummaryRow label="Facebook"   value={data.facebook} />}
+                      {data.tiktok    && <SummaryRow label="TikTok"     value={data.tiktok} />}
+                    </>
+                  )}
 
                   <div className="h-px bg-[rgba(107,174,229,0.08)] my-2" />
 
