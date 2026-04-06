@@ -111,12 +111,12 @@ function StepIndicator({ step, current }: { step: typeof STEPS[0]; current: numb
       <div className={cn(
         'flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-300 flex-shrink-0',
         done   ? 'bg-[#2d2d60]/15 border-[#2d2d60]' :
-        active ? 'bg-[#2d2d60] border-[#2d2d60] shadow-[0_2px_8px_rgba(45,45,96,0.25)]' :
+        active ? 'bg-white border-white shadow-[0_2px_8px_rgba(45,45,96,0.25)]' :
                  'bg-white/40 border-[#2d2d60]/30'
       )}>
         {done
           ? <Check className="w-3.5 h-3.5 text-[#2d2d60]" strokeWidth={2.5} />
-          : <Icon className={cn('w-3.5 h-3.5', active ? 'text-white' : 'text-[#2d2d60]/50')} strokeWidth={1.75} />}
+          : <Icon className={cn('w-3.5 h-3.5', active ? 'text-[#2d2d60]' : 'text-[#2d2d60]/50')} strokeWidth={1.75} />}
       </div>
       <span className={cn(
         'text-sm font-medium hidden md:block transition-colors',
