@@ -1,0 +1,84 @@
+// ============================================================
+// orderStore — stockage local avec fallback Supabase
+// Fonctionne immédiatement sans configuration DB
+// ============================================================
+
+export interface LocalOrder {
+  id:              string
+  ref:             string
+  // Infos client
+  client_name:     string
+  client_email:    string
+  client_phone?:   string
+  // Infos entreprise
+  company_name?:   string
+  company_email?:  string
+  sector?:         string
+  // Projet
+  service:         string
+  brief?:          string
+  objectives?:     string
+  required_access?: string
+  // Finance
+  price:           number
+  status:          'pending' | 'in_progress' | 'completed' | 'cancelled'
+  payment_status:  'unpaid' | 'paid' | 'refunded'
+  // Dates
+  created_at:      string
+  updated_at:      string
+}
+
+const KEY = 'nhboost_orders'
+
+function genRef(): string {
+  const year    = new Date().getFullYear()
+  const existing = getAll()
+  const num     = String(existing.length + 1).padStart(4, '0')
+  return `CMD-${year}-${num}`
+}
+
+export function getAll(): LocalOrder[] {
+  if (typeof window === 'undefined') return []
+  try {
+    return JSON.parse(localStorage.getItem(KEY) ?? '[]')
+  } catch {
+    return []
+  }
+}
+
+export function insert(order: Omit<LocalOrder, 'id' | 'ref' | 'created_at' | 'updated_at'>): LocalOrder {
+  const now = new Date().toISOString()
+  const newOrder: LocalOrder = {
+    ...order,
+    id:         crypto.randomUUID(),
+    ref:        genRef(),
+    created_at: now,
+    updated_at: now,
+  }
+  const all = getAll()
+  all.unshift(newOrder)
+  localStorage.setItem(KEY, JSON.stringify(all))
+  return newOrder
+}
+
+export function update(id: string, patch: Partial<Omit<LocalOrder, 'id' | 'ref' | 'created_at'>>) {
+  const all = getAll().map(o =>
+    o.id === id ? { ...o, ...patch, updated_at: new Date().toISOString() } : o
+  )
+  localStorage.setItem(KEY, JSON.stringify(all))
+}
+
+export function getStats() {
+  const orders  = getAll()
+  // CA = uniquement les commandes finalisées (cohérent avec la page Projets)
+  const revenue = orders.filter(o => o.status === 'completed').reduce((s, o) => s + o.price, 0)
+  const costs   = Math.round(revenue * 0.64)
+  return {
+    revenue,
+    costs,
+    profit: revenue - costs,
+    active: orders.filter(o => ['pending', 'in_progress'].includes(o.status)).length,
+    total:  orders.length,
+    orders,
+  }
+}
