@@ -25,55 +25,49 @@ export default function KPICard({
   index = 0,
 }: KPICardProps) {
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus
-  const trendColor = trend === 'up' ? '#22C55E' : trend === 'down' ? '#EF4444' : '#8B95C4'
+  const trendColor = trend === 'up' ? '#22C55E' : trend === 'down' ? '#EF4444' : '#9CA3AF'
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08, ease: 'easeOut' }}
-      className="relative group rounded-2xl bg-[#161A34] border border-[rgba(107,174,229,0.12)] p-5 overflow-hidden hover:border-[rgba(107,174,229,0.25)] transition-all duration-300"
+      className="relative group rounded-2xl bg-white border border-[#E2E8F2] p-5 overflow-hidden hover:border-[#4a81a4] hover:shadow-[0_4px_16px_rgba(45,45,96,0.1)] transition-all duration-300 shadow-[0_1px_3px_rgba(45,45,96,0.07)]"
     >
-      {/* Glow on hover */}
+      {/* Subtle top accent */}
       <div
-        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl"
-        style={{ background: `radial-gradient(ellipse at top left, ${iconColor}08 0%, transparent 70%)` }}
+        className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl opacity-70"
+        style={{ background: `linear-gradient(90deg, ${iconColor}, transparent)` }}
       />
 
       {/* Top row */}
-      <div className="flex items-start justify-between mb-4">
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-[#4A5180]">
+      <div className="flex items-start justify-between mb-4 mt-1">
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF]">
           {label}
         </span>
         <div
-          className="flex items-center justify-center w-8 h-8 rounded-lg"
-          style={{ background: `${iconColor}14` }}
+          className="flex items-center justify-center w-8 h-8 rounded-xl"
+          style={{ background: `${iconColor}18` }}
         >
           <Icon className="w-4 h-4" style={{ color: iconColor }} strokeWidth={1.75} />
         </div>
       </div>
 
       {/* Value */}
-      <div className="text-[28px] font-bold text-[#F0F2FF] leading-none tracking-tight mb-3">
+      <div className="text-[26px] font-bold text-[#2d2d60] leading-none tracking-tight mb-3">
         {value}
       </div>
 
       {/* Delta */}
       {delta && (
         <div className="flex items-center gap-1.5">
-          <TrendIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: trendColor }} />
-          <span className="text-[12px] font-medium" style={{ color: trendColor }}>
+          <TrendIcon className="w-3 h-3 flex-shrink-0" style={{ color: trendColor }} />
+          <span className="text-[11px] font-medium" style={{ color: trendColor }}>
             {delta}
           </span>
-          <span className="text-[11px] text-[#4A5180]">vs mois dernier</span>
+          <span className="text-[11px] text-[#9CA3AF]">vs mois dernier</span>
         </div>
       )}
-
-      {/* Bottom accent bar */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-px opacity-40"
-        style={{ background: `linear-gradient(90deg, transparent, ${iconColor}, transparent)` }}
-      />
     </motion.div>
   )
 }

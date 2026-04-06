@@ -282,11 +282,11 @@ export default function TopBar({ onMenuOpen, title }: TopBarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 h-14 flex items-center gap-3 px-4 md:px-6 bg-[#0A0B14]/80 backdrop-blur-md border-b border-[rgba(107,174,229,0.1)]">
+    <header className="sticky top-0 z-30 h-14 flex items-center gap-3 px-4 md:px-6 bg-white/90 backdrop-blur-md border-b border-[#E2E8F2] shadow-[0_1px_3px_rgba(45,45,96,0.06)]">
       {/* Hamburger */}
       <button
         onClick={onMenuOpen}
-        className="lg:hidden flex items-center justify-center w-8 h-8 rounded-lg text-[#8B95C4] hover:text-[#F0F2FF] hover:bg-[rgba(107,174,229,0.08)] transition-colors flex-shrink-0"
+        className="lg:hidden flex items-center justify-center w-8 h-8 rounded-lg text-[#6B7280] hover:text-[#2d2d60] hover:bg-[#EFF3F9] transition-colors flex-shrink-0"
         aria-label="Ouvrir le menu"
       >
         <Menu className="w-[18px] h-[18px]" />
@@ -294,27 +294,27 @@ export default function TopBar({ onMenuOpen, title }: TopBarProps) {
 
       {/* Titre page — mobile */}
       {title && (
-        <span className="lg:hidden text-sm font-semibold text-[#F0F2FF] truncate">
+        <span className="lg:hidden text-sm font-semibold text-[#2d2d60] truncate">
           {title}
         </span>
       )}
 
       {/* Barre de recherche */}
-      <div className="hidden md:flex flex-1 max-w-sm items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgba(107,174,229,0.06)] border border-[rgba(107,174,229,0.1)] hover:border-[rgba(107,174,229,0.25)] transition-colors group">
-        <Search className="w-3.5 h-3.5 text-[#4A5180] group-hover:text-[#8B95C4] transition-colors flex-shrink-0" />
+      <div className="hidden md:flex flex-1 max-w-sm items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F5F7FA] border border-[#E2E8F2] hover:border-[#4a81a4] transition-colors group">
+        <Search className="w-3.5 h-3.5 text-[#9CA3AF] group-hover:text-[#4a81a4] transition-colors flex-shrink-0" />
         <input
           type="text"
           placeholder="Rechercher..."
-          className="flex-1 bg-transparent text-sm text-[#F0F2FF] placeholder:text-[#4A5180] outline-none min-w-0"
+          className="flex-1 bg-transparent text-sm text-[#374151] placeholder:text-[#9CA3AF] outline-none min-w-0"
         />
-        <kbd className="hidden sm:flex items-center gap-1 text-[10px] font-medium text-[#4A5180] bg-[rgba(107,174,229,0.08)] px-1.5 py-0.5 rounded">
+        <kbd className="hidden sm:flex items-center gap-1 text-[10px] font-medium text-[#9CA3AF] bg-[#EFF3F9] px-1.5 py-0.5 rounded border border-[#E2E8F2]">
           ⌘K
         </kbd>
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">
         {/* Search — mobile */}
-        <button className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg text-[#8B95C4] hover:text-[#F0F2FF] hover:bg-[rgba(107,174,229,0.08)] transition-colors">
+        <button className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg text-[#6B7280] hover:text-[#2d2d60] hover:bg-[#EFF3F9] transition-colors">
           <Search className="w-[17px] h-[17px]" />
         </button>
 
@@ -325,18 +325,17 @@ export default function TopBar({ onMenuOpen, title }: TopBarProps) {
             className={cn(
               'relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors',
               notifOpen
-                ? 'text-[#F0F2FF] bg-[rgba(107,174,229,0.12)]'
-                : 'text-[#8B95C4] hover:text-[#F0F2FF] hover:bg-[rgba(107,174,229,0.08)]',
+                ? 'text-[#2d2d60] bg-[#E8F1F8]'
+                : 'text-[#6B7280] hover:text-[#2d2d60] hover:bg-[#EFF3F9]',
             )}
             aria-label="Notifications"
           >
             <Bell className="w-[17px] h-[17px]" />
-            {/* Badge non-lu */}
             {unreadCount > 0 && (
               <motion.span
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#6AAEE5] text-[9px] font-bold text-[#0A0B14] ring-1 ring-[#0A0B14]"
+                className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#2d2d60] text-[9px] font-bold text-white ring-1 ring-white"
               >
                 {unreadCount > 9 ? '9+' : unreadCount}
               </motion.span>
@@ -358,21 +357,21 @@ export default function TopBar({ onMenuOpen, title }: TopBarProps) {
         {/* Paramètres */}
         <Link
           href="/parametres"
-          className="hidden sm:flex items-center justify-center w-8 h-8 rounded-lg text-[#8B95C4] hover:text-[#F0F2FF] hover:bg-[rgba(107,174,229,0.08)] transition-colors"
+          className="hidden sm:flex items-center justify-center w-8 h-8 rounded-lg text-[#6B7280] hover:text-[#2d2d60] hover:bg-[#EFF3F9] transition-colors"
         >
           <Settings className="w-[17px] h-[17px]" />
         </Link>
 
         {/* Divider */}
-        <div className="hidden sm:block w-px h-5 bg-[rgba(107,174,229,0.15)] mx-1" />
+        <div className="hidden sm:block w-px h-5 bg-[#E2E8F2] mx-1" />
 
         {/* Avatar */}
-        <Link href="/parametres" className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl hover:bg-[rgba(107,174,229,0.06)] transition-colors group">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#4A7DC4] to-[#2B3580] flex items-center justify-center flex-shrink-0">
+        <Link href="/parametres" className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl hover:bg-[#EFF3F9] transition-colors group">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#4a81a4] to-[#2d2d60] flex items-center justify-center flex-shrink-0">
             <span className="text-[11px] font-semibold text-white">{profile.initials}</span>
           </div>
           <div className="hidden md:flex flex-col leading-none">
-            <span className="text-[12px] font-semibold text-[#F0F2FF] group-hover:text-white transition-colors">{profile.name}</span>
+            <span className="text-[12px] font-semibold text-[#2d2d60] group-hover:text-[#4a81a4] transition-colors">{profile.name}</span>
           </div>
         </Link>
       </div>

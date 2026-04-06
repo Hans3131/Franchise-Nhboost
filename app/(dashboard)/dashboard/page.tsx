@@ -33,18 +33,18 @@ interface KpiState {
 }
 
 const QUICK_ACTIONS = [
-  { label: 'Nouvelle commande',  href: '/commander',  icon: Plus,            color: '#6AAEE5', primary: true },
-  { label: 'Mes commandes',      href: '/commandes',  icon: ClipboardList,   color: '#4A7DC4' },
+  { label: 'Nouvelle commande',  href: '/commander',  icon: Plus,            color: '#2d2d60', primary: true },
+  { label: 'Mes commandes',      href: '/commandes',  icon: ClipboardList,   color: '#4a81a4' },
   { label: 'Mes projets',        href: '/projets',    icon: FolderOpen,      color: '#8B5CF6' },
   { label: 'Support',            href: '/support',    icon: HeadphonesIcon,  color: '#F59E0B' },
   { label: 'Ressources',         href: '/ressources', icon: BookOpen,        color: '#22C55E' },
 ]
 
 const STATUS_CONFIG = {
-  pending:     { label: 'En attente', bg: 'rgba(245,158,11,0.1)',  text: '#F59E0B',  dot: '#F59E0B' },
-  in_progress: { label: 'En cours',   bg: 'rgba(106,174,229,0.1)', text: '#6AAEE5',  dot: '#6AAEE5' },
-  completed:   { label: 'Terminé',    bg: 'rgba(34,197,94,0.1)',   text: '#22C55E',  dot: '#22C55E' },
-  cancelled:   { label: 'Annulé',     bg: 'rgba(239,68,68,0.1)',   text: '#EF4444',  dot: '#EF4444' },
+  pending:     { label: 'En attente', bg: '#FEF3C7',  text: '#92400E',  dot: '#F59E0B' },
+  in_progress: { label: 'En cours',   bg: '#E8F1F8',  text: '#2d2d60',  dot: '#4a81a4' },
+  completed:   { label: 'Terminé',    bg: '#DCFCE7',  text: '#166534',  dot: '#22C55E' },
+  cancelled:   { label: 'Annulé',     bg: '#FEE2E2',  text: '#991B1B',  dot: '#EF4444' },
 } as const
 
 const EMPTY_KPI: KpiState = { revenue: 0, costs: 0, profit: 0, active: 0, recentOrders: [] }
@@ -125,15 +125,15 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#4A5180] mb-1">
+        <p className="text-xs font-medium uppercase tracking-widest text-[#9CA3AF] mb-1">
           Avril 2026
         </p>
-        <h1 className="text-2xl md:text-3xl font-bold text-[#F0F2FF] tracking-tight">
+        <h1 className="text-2xl md:text-3xl font-bold text-[#2d2d60] tracking-tight">
           Tableau de bord
         </h1>
-        <p className="text-sm text-[#8B95C4] mt-1">
+        <p className="text-sm text-[#6B7280] mt-1">
           Bienvenue,{' '}
-          <span className="text-[#6AAEE5] font-medium">
+          <span className="text-[#4a81a4] font-semibold">
             {userName || 'Franchisé'}
           </span>{' '}
           — voici l'aperçu de votre activité.
@@ -157,7 +157,7 @@ export default function DashboardPage() {
           transition={{ duration: 0.4, delay: 0.35 }}
           className="lg:col-span-1"
         >
-          <h2 className="text-[13px] font-semibold uppercase tracking-widest text-[#4A5180] mb-4">
+          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-4">
             Actions rapides
           </h2>
           <div className="space-y-2">
@@ -168,25 +168,25 @@ export default function DashboardPage() {
                 className={cn(
                   'group flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200',
                   primary
-                    ? 'bg-gradient-to-r from-[#6AAEE5]/20 to-[#2B3580]/20 border-[rgba(106,174,229,0.3)] hover:border-[rgba(106,174,229,0.5)] hover:from-[#6AAEE5]/25 hover:to-[#2B3580]/25'
-                    : 'bg-[#161A34] border-[rgba(107,174,229,0.1)] hover:border-[rgba(107,174,229,0.22)] hover:bg-[#1D2240]'
+                    ? 'bg-[#2d2d60] border-[#2d2d60] hover:bg-[#4a81a4] hover:border-[#4a81a4] shadow-[0_2px_8px_rgba(45,45,96,0.2)]'
+                    : 'bg-white border-[#E2E8F2] hover:border-[#4a81a4] hover:shadow-[0_2px_8px_rgba(74,129,164,0.1)]'
                 )}
               >
                 <div
                   className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0"
-                  style={{ background: `${color}18` }}
+                  style={{ background: primary ? 'rgba(255,255,255,0.15)' : `${color}18` }}
                 >
-                  <Icon className="w-4 h-4" style={{ color }} strokeWidth={1.75} />
+                  <Icon className="w-4 h-4" style={{ color: primary ? '#FFFFFF' : color }} strokeWidth={1.75} />
                 </div>
                 <span className={cn(
                   'text-sm font-medium flex-1',
-                  primary ? 'text-[#6AAEE5]' : 'text-[#8B95C4] group-hover:text-[#F0F2FF]'
+                  primary ? 'text-white' : 'text-[#374151] group-hover:text-[#2d2d60]'
                 )}>
                   {label}
                 </span>
                 <ArrowRight
-                  className="w-3.5 h-3.5 opacity-0 group-hover:opacity-60 -translate-x-1 group-hover:translate-x-0 transition-all duration-200"
-                  style={{ color }}
+                  className="w-3.5 h-3.5 opacity-0 group-hover:opacity-70 -translate-x-1 group-hover:translate-x-0 transition-all duration-200"
+                  style={{ color: primary ? '#FFFFFF' : color }}
                 />
               </Link>
             ))}
@@ -201,28 +201,28 @@ export default function DashboardPage() {
           className="lg:col-span-2"
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[13px] font-semibold uppercase tracking-widest text-[#4A5180]">
+            <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF]">
               Commandes récentes
             </h2>
             <Link
               href="/commandes"
-              className="flex items-center gap-1 text-xs font-medium text-[#6AAEE5] hover:text-[#F0F2FF] transition-colors group"
+              className="flex items-center gap-1 text-xs font-medium text-[#4a81a4] hover:text-[#2d2d60] transition-colors group"
             >
               Tout voir
               <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
 
-          <div className="rounded-2xl border border-[rgba(107,174,229,0.12)] overflow-hidden bg-[#161A34]">
+          <div className="rounded-2xl border border-[#E2E8F2] overflow-hidden bg-white shadow-[0_1px_3px_rgba(45,45,96,0.06)]">
             {/* Table header — desktop */}
-            <div className="hidden sm:grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-4 py-2.5 border-b border-[rgba(107,174,229,0.08)] bg-[#1D2240]/50">
+            <div className="hidden sm:grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-4 py-2.5 border-b border-[#F0F3F8] bg-[#F8FAFC]">
               {['Service', 'Client', 'Prix', 'Statut'].map(h => (
-                <span key={h} className="text-[10px] font-semibold uppercase tracking-widest text-[#4A5180]">{h}</span>
+                <span key={h} className="text-[10px] font-semibold uppercase tracking-widest text-[#9CA3AF]">{h}</span>
               ))}
             </div>
 
             {/* Rows */}
-            <div className="divide-y divide-[rgba(107,174,229,0.06)]">
+            <div className="divide-y divide-[#F0F3F8]">
               {RECENT_ORDERS.map((order, i) => {
                 const s = STATUS_CONFIG[order.status]
                 return (
@@ -231,18 +231,18 @@ export default function DashboardPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.45 + i * 0.05 }}
-                    className="group px-4 py-3.5 hover:bg-[rgba(107,174,229,0.03)] transition-colors cursor-pointer"
+                    className="group px-4 py-3.5 hover:bg-[#F8FAFC] transition-colors cursor-pointer"
                   >
                     {/* Desktop row */}
                     <div className="hidden sm:grid grid-cols-[1fr_1fr_auto_auto] gap-4 items-center">
                       <div>
-                        <p className="text-[13px] font-semibold text-[#F0F2FF] group-hover:text-white transition-colors truncate">
+                        <p className="text-[13px] font-semibold text-[#2d2d60] group-hover:text-[#4a81a4] transition-colors truncate">
                           {order.service}
                         </p>
-                        <p className="text-[11px] text-[#4A5180] font-mono mt-0.5">{order.id}</p>
+                        <p className="text-[11px] text-[#9CA3AF] font-mono mt-0.5">{order.id}</p>
                       </div>
-                      <p className="text-[13px] text-[#8B95C4] truncate">{order.client}</p>
-                      <p className="text-[13px] font-semibold text-[#F0F2FF] font-mono whitespace-nowrap">{order.price}</p>
+                      <p className="text-[13px] text-[#6B7280] truncate">{order.client}</p>
+                      <p className="text-[13px] font-semibold text-[#2d2d60] font-mono whitespace-nowrap">{order.price}</p>
                       <span
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap"
                         style={{ background: s.bg, color: s.text }}
@@ -251,9 +251,6 @@ export default function DashboardPage() {
                           className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                           style={{
                             background: s.dot,
-                            boxShadow: ['in_progress', 'pending'].includes(order.status)
-                              ? `0 0 0 2px ${s.dot}30`
-                              : undefined,
                             animation: ['in_progress', 'pending'].includes(order.status)
                               ? 'pulse-dot 1.5s ease-in-out infinite'
                               : undefined,
@@ -266,8 +263,8 @@ export default function DashboardPage() {
                     {/* Mobile row */}
                     <div className="flex sm:hidden items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-[#F0F2FF] truncate">{order.service}</p>
-                        <p className="text-[11px] text-[#8B95C4] mt-0.5">{order.client} · {order.price}</p>
+                        <p className="text-[13px] font-semibold text-[#2d2d60] truncate">{order.service}</p>
+                        <p className="text-[11px] text-[#6B7280] mt-0.5">{order.client} · {order.price}</p>
                       </div>
                       <span
                         className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium flex-shrink-0"
@@ -290,14 +287,14 @@ export default function DashboardPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.55 }}
-        className="rounded-2xl border border-[rgba(107,174,229,0.12)] bg-[#161A34] p-6"
+        className="rounded-2xl border border-[#E2E8F2] bg-white p-6 shadow-[0_1px_3px_rgba(45,45,96,0.07)]"
       >
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-[13px] font-semibold uppercase tracking-widest text-[#4A5180] mb-1">
+            <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1">
               Chiffre d'affaires mensuel
             </h2>
-            <p className="text-2xl font-bold text-[#F0F2FF] tracking-tight">€24 800</p>
+            <p className="text-2xl font-bold text-[#2d2d60] tracking-tight">€24 800</p>
           </div>
           <div className="flex gap-2">
             {['3M', '6M', '1A'].map((p, i) => (
@@ -306,8 +303,8 @@ export default function DashboardPage() {
                 className={cn(
                   'px-3 py-1 rounded-lg text-xs font-semibold transition-all',
                   i === 1
-                    ? 'bg-[rgba(106,174,229,0.15)] text-[#6AAEE5] border border-[rgba(106,174,229,0.3)]'
-                    : 'text-[#4A5180] hover:text-[#8B95C4] hover:bg-[rgba(107,174,229,0.06)]'
+                    ? 'bg-[#E8F1F8] text-[#4a81a4] border border-[#C5D9EC]'
+                    : 'text-[#9CA3AF] hover:text-[#2d2d60] hover:bg-[#F5F7FA]'
                 )}
               >
                 {p}
@@ -333,15 +330,15 @@ export default function DashboardPage() {
                   className={cn(
                     'w-full rounded-t-md transition-all duration-700',
                     current
-                      ? 'bg-gradient-to-t from-[#2B3580] to-[#6AAEE5]'
-                      : 'bg-[rgba(107,174,229,0.15)] hover:bg-[rgba(107,174,229,0.25)]'
+                      ? 'bg-gradient-to-t from-[#2d2d60] to-[#4a81a4]'
+                      : 'bg-[#E8EDF4] hover:bg-[#D1DCE8]'
                   )}
                   style={{ height: `${value}%` }}
                 />
               </div>
               <span className={cn(
                 'text-[10px] font-medium',
-                current ? 'text-[#6AAEE5]' : 'text-[#4A5180]'
+                current ? 'text-[#4a81a4]' : 'text-[#9CA3AF]'
               )}>
                 {month}
               </span>

@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Next.js Dev Server",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "name": "NHBoost Dev Server",
+      "runtimeExecutable": "/opt/homebrew/Cellar/node@20/20.20.1/bin/node",
+      "runtimeArgs": ["/Users/mac/Documents/Claude Project/NHBoost/dev-server.mjs"],
       "port": 3000
     }
   ]
