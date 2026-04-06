@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -13,7 +14,6 @@ import {
   BookOpen,
   X,
   ChevronRight,
-  Zap,
   Settings,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -55,13 +55,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(107,174,229,0.1)]">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-[#6AAEE5] to-[#2B3580]">
-          <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
-        </div>
-        <div className="flex flex-col leading-none">
-          <span className="text-[15px] font-bold text-[#F0F2FF] tracking-tight">NHBoost</span>
-          <span className="text-[10px] text-[#4A5180] font-medium uppercase tracking-widest mt-0.5">Portail Franchisé</span>
-        </div>
+        <Image
+          src="/logo.png"
+          alt="NHBoost"
+          width={120}
+          height={40}
+          className="object-contain"
+          priority
+        />
         {/* Close button — mobile only */}
         <button
           onClick={onClose}
