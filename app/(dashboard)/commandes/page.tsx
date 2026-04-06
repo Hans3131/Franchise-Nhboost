@@ -542,7 +542,7 @@ export default function CommandesPage() {
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
         <p className="text-xs font-semibold uppercase tracking-widest text-[#4A5180] mb-1">Historique</p>
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <h1 className="text-2xl md:text-3xl font-bold text-[#F0F2FF] tracking-tight">Mes commandes</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold text-[#2d2d60] tracking-tight">Mes commandes</h1>
           <Link
             href="/commander"
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 flex-shrink-0"

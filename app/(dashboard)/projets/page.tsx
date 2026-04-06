@@ -326,7 +326,7 @@ export default function ProjetsPage() {
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-[#4A5180] mb-1">Galerie</p>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#F0F2FF] tracking-tight">Projets finalisés</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold text-[#2d2d60] tracking-tight">Projets finalisés</h1>
           <p className="text-sm text-[#8B95C4] mt-1">
             <span className="text-[#6AAEE5] font-medium">{projects.length} projet{projects.length !== 1 ? 's' : ''}</span>
             {' '}livrés avec succès

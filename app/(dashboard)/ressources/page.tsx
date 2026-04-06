@@ -328,7 +328,7 @@ export default function RessourcesPage() {
           <p className="text-xs font-semibold uppercase tracking-widest text-[#4A5180] mb-1">
             Médiathèque
           </p>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#F0F2FF] tracking-tight">
+          <h1 className="text-2xl md:text-3xl font-semibold text-[#2d2d60] tracking-tight">
             Ressources
           </h1>
           <p className="text-sm text-[#8B95C4] mt-1">

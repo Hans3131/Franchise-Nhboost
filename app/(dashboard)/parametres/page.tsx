@@ -210,7 +210,7 @@ export default function ParametresPage() {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
         <p className="text-xs font-semibold uppercase tracking-widest text-[#4A5180] mb-1">Compte</p>
-        <h1 className="text-2xl md:text-3xl font-bold text-[#F0F2FF] tracking-tight">Paramètres</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold text-[#2d2d60] tracking-tight">Paramètres</h1>
         <p className="text-sm text-[#8B95C4] mt-1">Gérez votre profil et vos préférences.</p>
       </motion.div>
 

@@ -220,7 +220,7 @@ export default function SupportPage() {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
         <p className="text-xs font-semibold uppercase tracking-widest text-[#4A5180] mb-1">Aide & Contact</p>
-        <h1 className="text-2xl md:text-3xl font-bold text-[#F0F2FF] tracking-tight">Support</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold text-[#2d2d60] tracking-tight">Support</h1>
         <p className="text-sm text-[#8B95C4] mt-1">Notre équipe vous répond sous 24h ouvrées.</p>
       </motion.div>
 

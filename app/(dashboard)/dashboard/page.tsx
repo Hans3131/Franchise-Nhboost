@@ -128,7 +128,7 @@ export default function DashboardPage() {
         <p className="text-xs font-medium uppercase tracking-widest text-[#9CA3AF] mb-1">
           Avril 2026
         </p>
-        <h1 className="text-2xl md:text-3xl font-bold text-[#2d2d60] tracking-tight">
+        <h1 className="text-2xl md:text-3xl font-semibold text-[#2d2d60] tracking-tight">
           Tableau de bord
         </h1>
         <p className="text-sm text-[#6B7280] mt-1">
