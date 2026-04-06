@@ -63,6 +63,7 @@ create table if not exists public.orders (
 create table if not exists public.support_tickets (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid references auth.users(id) on delete cascade not null,
+  order_id   uuid references public.orders(id) on delete set null,
   ref        text unique,
   subject    text not null,
   message    text not null,
