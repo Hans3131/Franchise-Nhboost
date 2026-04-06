@@ -131,7 +131,7 @@ function StepIndicator({ step, current }: { step: typeof STEPS[0]; current: numb
 function FieldWrapper({ label, error, required, children }: { label: string; error?: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-[12px] font-semibold text-[#2d2d60] uppercase tracking-widest">
+      <label className="block text-[10px] font-semibold text-[#2d2d60] uppercase tracking-widest">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
