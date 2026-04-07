@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { getStats } from '@/lib/orderStore'
-import { createClient } from '@/lib/supabase/client'
 import {
   Euro,
   ShoppingCart,
@@ -56,52 +55,28 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState('')
 
   useEffect(() => {
-    // ── Affichage immédiat localStorage ───────────────────
-    const stats = getStats()
-    const buildKpi = (orders: typeof stats.orders) => {
+    const buildKpi = (orders: { ref: string; service: string; client_name: string; price: number; status: string; created_at: string }[]) => {
       const revenue = orders.filter(o => o.status === 'completed').reduce((s, o) => s + o.price, 0)
       const costs   = Math.round(revenue * 0.64)
       const active  = orders.filter(o => ['pending', 'in_progress'].includes(o.status)).length
       const recent  = orders.slice(0, 4).map(o => ({
         id: o.ref, ref: o.ref, service: o.service, client: o.client_name,
         date: new Date(o.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }),
-        price: '€' + o.price.toLocaleString('fr-FR'), status: o.status,
+        price: '€' + o.price.toLocaleString('fr-FR'), status: o.status as KpiState['recentOrders'][0]['status'],
       }))
       return { revenue, costs, profit: revenue - costs, active, recentOrders: recent }
     }
-    setKpi(buildKpi(stats.orders))
-    setLoading(false)
 
-    // ── Nom du franchisé ──────────────────────────────────
+    // ── Nom du franchisé (localStorage + Supabase) ────────
     try {
       const saved = JSON.parse(localStorage.getItem('nhboost_profile') ?? '{}')
       if (saved.company_name) setUserName(saved.company_name)
     } catch {}
 
-    // ── Supabase : données réelles ────────────────────────
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-
-      // Nom depuis profil Supabase
-      supabase.from('profiles').select('company_name, franchise_code').eq('id', user.id).single()
-        .then(({ data: profile }) => {
-          const name = profile?.company_name || profile?.franchise_code || user.email?.split('@')[0] || ''
-          if (name) setUserName(name)
-        })
-
-      // Commandes depuis Supabase
-      supabase.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-        .then(({ data: rows, error }) => {
-          if (error || !rows) return
-          // Mapper en format LocalOrder-compatible
-          const mapped = rows.map(r => ({
-            ref: r.ref ?? r.id, service: r.service, client_name: r.client_name ?? '—',
-            price: Number(r.price ?? 0), status: r.status ?? 'pending',
-            created_at: r.created_at ?? new Date().toISOString(),
-          }))
-          setKpi(buildKpi(mapped as Parameters<typeof buildKpi>[0]))
-        })
+    // ── Données via store Supabase-first ──────────────────
+    getStats().then(stats => {
+      setKpi(buildKpi(stats.orders))
+      setLoading(false)
     })
   }, [])
 

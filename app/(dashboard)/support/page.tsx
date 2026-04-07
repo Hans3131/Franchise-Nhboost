@@ -6,7 +6,6 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { getAll as ticketGetAll, insert as ticketInsert } from '@/lib/ticketStore'
 import { getAll as orderGetAll } from '@/lib/orderStore'
 import { insert as notifInsert } from '@/lib/notificationStore'
-import { createClient } from '@/lib/supabase/client'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -86,7 +85,6 @@ export default function SupportPage() {
   const [ordersLoading, setOrdersLoading] = useState(true)
 
   useEffect(() => {
-    // ── Tickets : affichage immédiat localStorage ──────────────
     const mapTicket = (r: { ref?: string; id?: string; subject: string; status: string; priority: string; created_at: string }) => ({
       id:       r.ref ?? String(r.id),
       subject:  r.subject,
@@ -94,9 +92,7 @@ export default function SupportPage() {
       priority: r.priority as TicketRow['priority'],
       date:     new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }),
     })
-    setTickets(ticketGetAll().slice(0, 10).map(mapTicket))
 
-    // ── Commandes : affichage immédiat localStorage ────────────
     const mapOrder = (o: Record<string, unknown>): OrderOption => {
       const company = String(o.company_name ?? o.companyName ?? '')
       const client  = String(o.client_name  ?? o.client      ?? '')
@@ -104,38 +100,16 @@ export default function SupportPage() {
       const name    = company || client || 'Client'
       return { id: String(o.id), label: `${name} — ${service}` }
     }
-    const localOrders = orderGetAll().map(o => mapOrder(o as unknown as Record<string, unknown>))
-    setOrders(localOrders)
-    setOrdersLoading(false)
 
-    // ── Supabase ───────────────────────────────────────────────
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
+    // Tickets via store (Supabase-first)
+    ticketGetAll().then(tickets => {
+      setTickets(tickets.slice(0, 10).map(mapTicket))
+    })
 
-      // Tickets
-      supabase.from('support_tickets').select('*').eq('user_id', user.id)
-        .order('created_at', { ascending: false }).limit(10)
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            setTickets(data.map(r => mapTicket({
-              ref: r.ref, id: r.id, subject: r.subject,
-              status: r.status, priority: r.priority, created_at: r.created_at,
-            })))
-          }
-        })
-
-      // Commandes
-      supabase.from('orders')
-        .select('id, service, company_name, client_name')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .then(({ data, error }) => {
-          if (!error && data) {
-            setOrders(data.map(o => mapOrder(o as Record<string, unknown>)))
-          }
-          setOrdersLoading(false)
-        })
+    // Commandes via store (Supabase-first)
+    orderGetAll().then(orders => {
+      setOrders(orders.map(o => mapOrder(o as unknown as Record<string, unknown>)))
+      setOrdersLoading(false)
     })
   }, [])
 
@@ -145,36 +119,28 @@ export default function SupportPage() {
   })
 
   const onSubmit = handleSubmit(async (data) => {
-    // 1. Sauvegarde localStorage
-    const newTicket = ticketInsert({
+    // 1. Sauvegarde (Supabase-first via store)
+    const newTicket = await ticketInsert({
       subject:  data.subject,
       message:  data.message,
       priority: data.priority,
       status:   'open',
+      order_id: data.orderId || null,
     })
 
-    // 2. Notification locale
-    notifInsert({
+    // 2. Notification (Supabase-first via store)
+    await notifInsert({
       type:    'ticket_created',
-      title:   `Ticket ${newTicket.ref} créé`,
+      title:   `Ticket ${newTicket.ref} cr\u00e9\u00e9`,
       message: data.subject,
       link:    '/support',
     })
 
-    // 3. Sauvegarde Supabase + envoi email
+    // 3. Envoi email (best-effort)
     try {
+      const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from('support_tickets').insert({
-          user_id:  user.id,
-          order_id: data.orderId || null,
-          subject:  data.subject,
-          message:  data.message,
-          priority: data.priority,
-          status:   'open',
-        })
-      }
       await fetch('/api/send-ticket', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,11 +154,11 @@ export default function SupportPage() {
           senderEmail: user?.email ?? '',
         }),
       })
-    } catch (_) { /* best-effort */ }
+    } catch { /* best-effort */ }
 
-    // 4. Refresh liste depuis localStorage
-    const stored = ticketGetAll().slice(0, 10)
-    setTickets(stored.map(r => ({
+    // 4. Refresh liste
+    const stored = await ticketGetAll()
+    setTickets(stored.slice(0, 10).map(r => ({
       id:       r.ref,
       subject:  r.subject,
       status:   r.status,

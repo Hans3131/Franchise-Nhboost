@@ -10,7 +10,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAll, type LocalOrder } from '@/lib/orderStore'
-import { createClient } from '@/lib/supabase/client'
 
 // ─── Mapping service → catégorie / couleur / icône ────────────
 type Category = 'all' | 'web' | 'seo' | 'design' | 'social' | 'marketing' | 'autre'
@@ -262,24 +261,8 @@ export default function ProjetsPage() {
   const [selected, setSelected]             = useState<Project | null>(null)
 
   useEffect(() => {
-    // Affichage immédiat localStorage
-    setProjects(getAll().filter(o => o.status === 'completed').map(mapOrder))
-
-    // Remplacement par Supabase
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            setProjects(data.map(r => mapOrder(r as unknown as LocalOrder)))
-          }
-        })
+    getAll().then(orders => {
+      setProjects(orders.filter(o => o.status === 'completed').map(mapOrder))
     })
   }, [])
 

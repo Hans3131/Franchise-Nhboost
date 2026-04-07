@@ -11,7 +11,6 @@ import {
   getAll as notifGetAll,
   markRead,
   markAllRead,
-  getUnreadCount,
   seedIfEmpty,
   type LocalNotification,
 } from '@/lib/notificationStore'
@@ -205,39 +204,12 @@ export default function TopBar({ onMenuOpen, title }: TopBarProps) {
     })
   }, [])
 
-  // ── Charger notifications ──────────────────────────────────
+  // ── Charger notifications (Supabase-first via store) ────────
   const refreshNotifs = useCallback(async () => {
-    // Affichage immédiat localStorage
-    seedIfEmpty()
-    const local = notifGetAll()
-    setNotifications(local)
-    setUnreadCount(local.filter(n => !n.read).length)
-
-    // Fusion avec Supabase
-    try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50)
-      if (!error && data && data.length > 0) {
-        const mapped: LocalNotification[] = data.map(n => ({
-          id:         n.id,
-          type:       n.type as LocalNotification['type'],
-          title:      n.title,
-          message:    n.message,
-          link:       n.link ?? undefined,
-          read:       n.read,
-          created_at: n.created_at,
-        }))
-        setNotifications(mapped)
-        setUnreadCount(mapped.filter(n => !n.read).length)
-      }
-    } catch {}
+    await seedIfEmpty()
+    const all = await notifGetAll()
+    setNotifications(all)
+    setUnreadCount(all.filter(n => !n.read).length)
   }, [])
 
   useEffect(() => {
@@ -259,26 +231,18 @@ export default function TopBar({ onMenuOpen, title }: TopBarProps) {
   }, [notifOpen])
 
   // ── Marquer comme lu + navigation ─────────────────────────
-  const handleMarkRead = (id: string, link?: string) => {
-    markRead(id)
+  const handleMarkRead = async (id: string, link?: string) => {
+    await markRead(id)
     refreshNotifs()
-    // Sync Supabase (best-effort)
-    createClient().from('notifications').update({ read: true }).eq('id', id).then(() => {})
     if (link) {
       setNotifOpen(false)
       router.push(link)
     }
   }
 
-  const handleMarkAll = () => {
-    markAllRead()
+  const handleMarkAll = async () => {
+    await markAllRead()
     refreshNotifs()
-    // Sync Supabase (best-effort)
-    createClient().auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        createClient().from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false).then(() => {})
-      }
-    })
   }
 
   return (

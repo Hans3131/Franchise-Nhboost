@@ -200,7 +200,7 @@ export default function CommanderPage() {
   const handleSubmitOrder = async () => {
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 400))
-    const order = storeInsert({
+    const order = await storeInsert({
       service:         selectedService?.name ?? '',
       client_name:     data.clientName    ?? '',
       client_email:    data.clientEmail   ?? '',
@@ -276,40 +276,8 @@ export default function CommanderPage() {
       console.warn('send-order email failed:', e)
     }
 
-    // ── Sauvegarde Supabase ────────────────────────────────
-    try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from('orders').insert({
-          user_id:         user.id,
-          service:         order.service,
-          client_name:     order.client_name,
-          client_email:    order.client_email,
-          client_phone:    order.client_phone    ?? null,
-          company_name:    order.company_name    ?? null,
-          company_email:   order.company_email   ?? null,
-          sector:          order.sector          ?? null,
-          vat_number:      order.vat_number      ?? null,
-          website:         order.website         ?? null,
-          instagram:       order.instagram       ?? null,
-          facebook:        order.facebook        ?? null,
-          tiktok:          order.tiktok          ?? null,
-          brief:           order.brief           ?? null,
-          objectives:      order.objectives      ?? null,
-          required_access: order.required_access ?? null,
-          price:           order.price,
-          status:          'pending',
-          payment_status:  'unpaid',
-        })
-      }
-    } catch (e) {
-      console.warn('Supabase order insert failed:', e)
-    }
-
-    // ── Notification locale ────────────────────────────────
-    notifInsert({
+    // ── Notification (Supabase-first via store) ─────────────
+    await notifInsert({
       type:    'order_placed',
       title:   `Commande ${order.ref} envoyée`,
       message: `${order.service} pour ${order.company_name || order.client_name} — €${order.price.toLocaleString('fr-FR')}`,

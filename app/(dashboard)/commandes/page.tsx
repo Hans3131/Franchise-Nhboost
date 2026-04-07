@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { getAll, update as storeUpdate } from '@/lib/orderStore'
-import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, ChevronDown, Eye,
@@ -136,8 +135,7 @@ function OrderDetailModal({
   const handleSave = async () => {
     setSaving(true)
     try {
-      // localStorage
-      storeUpdate(order.id, {
+      await storeUpdate(order.id, {
         client_name:     editData.client,
         client_email:    editData.clientEmail,
         client_phone:    editData.clientPhone,
@@ -148,24 +146,6 @@ function OrderDetailModal({
         objectives:      editData.objectives,
         required_access: editData.requiredAccess,
       })
-
-      // Supabase
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from('orders').update({
-          client_name:     editData.client,
-          client_email:    editData.clientEmail,
-          client_phone:    editData.clientPhone,
-          company_name:    editData.companyName,
-          company_email:   editData.companyEmail,
-          sector:          editData.sector,
-          brief:           editData.brief,
-          objectives:      editData.objectives,
-          required_access: editData.requiredAccess,
-        }).eq('id', order.id).eq('user_id', user.id)
-      }
-
       const updated: Order = { ...order, ...editData }
       onSave(updated)
       setIsEditing(false)
@@ -478,25 +458,9 @@ export default function CommandesPage() {
 
 
   useEffect(() => {
-    // Affichage immédiat depuis localStorage
-    const local = getAll().map(o => mapRow(o as unknown as Record<string, unknown>))
-    setOrders(local)
-    setLoading(false)
-
-    // Remplacement par les données Supabase
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            setOrders(data.map(row => mapRow(row as Record<string, unknown>)))
-          }
-        })
+    getAll().then(orders => {
+      setOrders(orders.map(o => mapRow(o as unknown as Record<string, unknown>)))
+      setLoading(false)
     })
   }, [])
 
