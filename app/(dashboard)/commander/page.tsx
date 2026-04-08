@@ -8,9 +8,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   User, Briefcase, FileText,
   Upload, CreditCard, CheckCircle2, ChevronRight,
-  ChevronLeft, Globe, Search, BarChart2, Palette,
-  Share2, PenTool, Megaphone, X, Check, Zap, Loader2,
+  ChevronLeft, Globe, Share2, X, Check, Zap, Loader2,
   Building2, Mail, Phone, Target, Key, Hash, AtSign, Users, Play,
+  MessageSquare,
 } from 'lucide-react'
 import { insert as storeInsert } from '@/lib/orderStore'
 import { insert as notifInsert } from '@/lib/notificationStore'
@@ -23,6 +23,7 @@ interface Service {
   id: string; name: string; description: string
   price: number; type: PaymentMode
   icon: React.ElementType; iconColor: string; popular?: boolean
+  engagement?: string
 }
 
 interface FormData {
@@ -30,6 +31,7 @@ interface FormData {
   clientName:     string
   clientEmail:    string
   clientPhone:    string
+  whatsappGroup:  string
   // Infos entreprise
   companyName:    string
   companyEmail:   string
@@ -45,7 +47,11 @@ interface FormData {
   // Projet
   brief:          string
   objectives:     string
+  specificRequest: string
   requiredAccess: string
+  domainName:     string
+  conversionType: string
+  horizon:        string
   // Fichiers & paiement
   files:          File[]
   paymentMode:    PaymentMode
@@ -53,14 +59,11 @@ interface FormData {
 
 // ─── Constants ────────────────────────────────────────────────
 const SERVICES: Service[] = [
-  { id: 'site-web',  name: 'Création site web',   description: 'Site vitrine ou e-commerce professionnel sur mesure',  price: 2400, type: 'one-shot',     icon: Globe,     iconColor: '#6AAEE5', popular: true },
-  { id: 'seo',       name: 'Campagne SEO',          description: 'Référencement naturel, audit et optimisation continue', price: 890,  type: 'subscription', icon: Search,    iconColor: '#22C55E' },
-  { id: 'logo',      name: 'Refonte logo',          description: 'Identité visuelle complète, charte graphique incluse', price: 450,  type: 'one-shot',     icon: Palette,   iconColor: '#8B5CF6' },
-  { id: 'social',    name: 'Pack réseaux sociaux',  description: 'Gestion et création de contenu pour vos réseaux',      price: 320,  type: 'subscription', icon: Share2,    iconColor: '#F59E0B' },
-  { id: 'contenu',   name: 'Rédaction de contenu',  description: 'Articles, fiches produits, copywriting optimisé SEO', price: 200,  type: 'one-shot',     icon: PenTool,   iconColor: '#EC4899' },
-  { id: 'ads',       name: 'Publicité Google Ads',  description: 'Campagnes Google Ads ciblées avec suivi des résultats',price: 500,  type: 'subscription', icon: Megaphone, iconColor: '#EF4444' },
-  { id: 'analytics', name: 'Rapport Analytics',     description: 'Tableau de bord et rapports mensuels de performance',  price: 150,  type: 'subscription', icon: BarChart2,  iconColor: '#14B8A6' },
-  { id: 'identite',  name: 'Kit communication',     description: 'Flyers, affiches, supports print et digital',          price: 350,  type: 'one-shot',     icon: Briefcase, iconColor: '#F97316' },
+  { id: 'site-onepage', name: 'Site One Page', description: 'Page unique optimisée, design professionnel responsive, formulaire de contact, mise en ligne, SEO Friendly', price: 300, type: 'one-shot', icon: Globe, iconColor: '#6AAEE5' },
+  { id: 'site-complet', name: 'Site Complet', description: 'Site multipages, design personnalisé, optimisation SEO de base, intégration WhatsApp/formulaire, responsive mobile', price: 800, type: 'one-shot', icon: Globe, iconColor: '#4A7DC4', popular: true },
+  { id: 'visibilite', name: 'Offre Visibilité', description: 'Création de contenus, gestion de visibilité digitale, vidéos réseaux sociaux, optimisation présence locale', price: 390, type: 'subscription', icon: Share2, iconColor: '#F59E0B', engagement: '6 mois' },
+  { id: 'acquisition', name: "Système d'Acquisition Simple", description: 'Tunnel simple, page de conversion, système de collecte de leads, structuration de l\'offre', price: 490, type: 'one-shot', icon: Target, iconColor: '#22C55E' },
+  { id: 'accompagnement', name: 'Accompagnement Business Premium', description: 'Positionnement stratégique, structuration offre, création contenu, système acquisition, optimisation commerciale', price: 2500, type: 'one-shot', icon: Briefcase, iconColor: '#8B5CF6' },
 ]
 
 const STEPS = [
@@ -84,6 +87,7 @@ const step1Schema = z.object({
   clientName:   z.string().min(2, 'Nom client requis (min. 2 caractères)'),
   clientEmail:  z.string().email('Email client invalide'),
   clientPhone:  z.string().optional().or(z.literal('')),
+  whatsappGroup: z.string().optional().or(z.literal('')),
   companyName:  z.string().min(2, 'Nom entreprise requis (min. 2 caractères)'),
   companyEmail: z.string().email('Email entreprise invalide').optional().or(z.literal('')),
   sector:       z.string().optional(),
@@ -98,7 +102,9 @@ const step1Schema = z.object({
 const step3Schema = z.object({
   brief:          z.string().min(20, 'Description requise (min. 20 caractères)'),
   objectives:     z.string().optional(),
+  specificRequest: z.string().optional(),
   requiredAccess: z.string().optional(),
+  domainName:     z.string().optional().or(z.literal('')),
 })
 
 // ─── Sub-components ───────────────────────────────────────────
@@ -128,12 +134,13 @@ function StepIndicator({ step, current }: { step: typeof STEPS[0]; current: numb
   )
 }
 
-function FieldWrapper({ label, error, required, children }: { label: string; error?: string; required?: boolean; children: React.ReactNode }) {
+function FieldWrapper({ label, error, required, children, info }: { label: string; error?: string; required?: boolean; children: React.ReactNode; info?: string }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-[10px] font-semibold text-[#2d2d60] uppercase tracking-widest">
+      <label className="block text-[10px] font-semibold text-[#4a81a4] uppercase tracking-widest">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
+      {info && <p className="text-[11px] text-[#6B7280]">{info}</p>}
       {children}
       {error && <p className="text-[11px] text-red-600 mt-1">{error}</p>}
     </div>
@@ -141,16 +148,16 @@ function FieldWrapper({ label, error, required, children }: { label: string; err
 }
 
 const inputBase = cn(
-  'w-full bg-white/90 border border-white/60 rounded-xl px-4 py-3',
-  'text-[14px] text-[#2d2d60] placeholder:text-[#8292d8]',
+  'w-full bg-[#F5F7FA] border border-[#E2E8F2] rounded-xl px-4 py-3',
+  'text-[14px] text-[#2d2d60] placeholder:text-[#9CA3AF]',
   'outline-none transition-all duration-200',
-  'focus:border-white focus:ring-2 focus:ring-white/40 focus:bg-white',
-  'hover:border-white/80 hover:bg-white/95'
+  'focus:border-[#6AAEE5] focus:ring-2 focus:ring-[#6AAEE5]/20 focus:bg-white',
+  'hover:border-[#6AAEE5]/50 hover:bg-white'
 )
 const inputErr = 'border-red-500/50 focus:border-red-500'
 const inputCls = (err?: boolean) => cn(inputBase, err && inputErr)
 
-function InputWithIcon({ icon: Icon, iconColor = '#4A5180', ...props }: React.InputHTMLAttributes<HTMLInputElement> & { icon: React.ElementType; iconColor?: string }) {
+function InputWithIcon({ icon: Icon, iconColor = '#4a81a4', ...props }: React.InputHTMLAttributes<HTMLInputElement> & { icon: React.ElementType; iconColor?: string }) {
   return (
     <div className="relative">
       <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: iconColor }} />
@@ -219,6 +226,10 @@ export default function CommanderPage() {
       price:           selectedService?.price ?? 0,
       status:          'pending',
       payment_status:  'unpaid',
+      cost:            0,
+      whatsapp_group:  data.whatsappGroup || undefined,
+      domain_name:     data.domainName || undefined,
+      specific_request: data.specificRequest || undefined,
     })
 
     // ── Récupérer le nom du franchisé ──────────────────────
@@ -268,6 +279,9 @@ export default function CommanderPage() {
           brief:          order.brief         ?? '',
           objectives:     order.objectives    ?? '',
           requiredAccess: order.required_access ?? '',
+          whatsappGroup:  data.whatsappGroup  ?? '',
+          domainName:     data.domainName     ?? '',
+          specificRequest: data.specificRequest ?? '',
           franchiseeName,
           files:          filesPayload,
         }),
@@ -302,6 +316,10 @@ export default function CommanderPage() {
           price:           order.price,
           status:          'pending',
           payment_status:  'unpaid',
+          cost:            0,
+          whatsapp_group:  data.whatsappGroup    ?? null,
+          domain_name:     data.domainName       ?? null,
+          specific_request: data.specificRequest ?? null,
         })
       }
     } catch (e) {
@@ -342,18 +360,18 @@ export default function CommanderPage() {
           <CheckCircle2 className="w-10 h-10 text-[#22C55E]" />
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <h2 className="text-2xl font-bold text-[#F0F2FF] mb-2">Commande enregistrée !</h2>
+          <h2 className="text-2xl font-bold text-[#2d2d60] mb-2">Commande enregistrée !</h2>
           {newOrderRef && <p className="text-[13px] font-mono text-[#6AAEE5] mb-1">{newOrderRef}</p>}
-          <p className="text-[#8B95C4] mb-2">Votre commande est en attente de traitement.</p>
-          <p className="text-[12px] text-[#4A5180] mb-6">Le paiement sera configuré prochainement via Stripe.</p>
+          <p className="text-[#6B7280] mb-2">Votre commande est en attente de traitement.</p>
+          <p className="text-[12px] text-[#9CA3AF] mb-6">Le paiement sera configuré prochainement via Stripe.</p>
           <div className="flex gap-3 justify-center">
             <a href="/commandes"
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#6AAEE5] to-[#4A7DC4] text-white text-sm font-semibold hover:opacity-90 transition-opacity">
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#2d2d60] to-[#4A7DC4] text-white text-sm font-semibold hover:opacity-90 transition-opacity">
               Voir mes commandes
             </a>
             <button
               onClick={() => { setSubmitted(false); setCurrent(1); setData({}); setNewOrderRef('') }}
-              className="px-6 py-2.5 rounded-xl bg-[rgba(106,174,229,0.12)] border border-[rgba(106,174,229,0.3)] text-[#6AAEE5] text-sm font-medium hover:bg-[rgba(106,174,229,0.2)] transition-colors">
+              className="px-6 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#E2E8F2] text-[#2d2d60] text-sm font-medium hover:bg-[#E2E8F2] transition-colors">
               Nouvelle commande
             </button>
           </div>
@@ -367,9 +385,9 @@ export default function CommanderPage() {
 
       {/* Header */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#4A5180] mb-1">Nouvelle commande</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-[#6B7280] mb-1">Nouvelle commande</p>
         <h1 className="text-2xl md:text-3xl font-semibold text-[#2d2d60] tracking-tight">Commander un service</h1>
-        <p className="text-sm text-[#8B95C4] mt-1">Complétez les étapes ci-dessous pour soumettre votre commande.</p>
+        <p className="text-sm text-[#6B7280] mt-1">Complétez les étapes ci-dessous pour soumettre votre commande.</p>
       </div>
 
       {/* Stepper */}
@@ -388,7 +406,7 @@ export default function CommanderPage() {
       </div>
 
       {/* Step content */}
-      <div className="rounded-2xl border border-[#b8c4e8] overflow-hidden" style={{ background: 'linear-gradient(160deg, #cdd3f0 0%, #aab7e6 45%, #8292d8 100%)' }}>
+      <div className="rounded-2xl border border-[#E2E8F2] overflow-hidden bg-white">
         <AnimatePresence mode="wait">
           <motion.div
             key={current}
@@ -435,11 +453,19 @@ export default function CommanderPage() {
                         placeholder="+33 6 00 00 00 00"
                       />
                     </FieldWrapper>
+                    <FieldWrapper label="Nom du groupe WhatsApp" error={form1.formState.errors.whatsappGroup?.message}>
+                      <InputWithIcon
+                        icon={MessageSquare}
+                        {...form1.register('whatsappGroup')}
+                        className={inputCls()}
+                        placeholder="Nom du groupe WhatsApp"
+                      />
+                    </FieldWrapper>
                   </div>
                 </div>
 
                 {/* Séparateur */}
-                <div className="h-px bg-[rgba(107,174,229,0.08)]" />
+                <div className="h-px bg-[#E2E8F2]" />
 
                 {/* Bloc entreprise */}
                 <div>
@@ -466,7 +492,7 @@ export default function CommanderPage() {
                     </FieldWrapper>
                     <FieldWrapper label="Secteur d'activité" error={form1.formState.errors.sector?.message}>
                       <div className="relative">
-                        <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4A5180] pointer-events-none" />
+                        <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#4a81a4] pointer-events-none" />
                         <select
                           {...form1.register('sector')}
                           className={cn(inputCls(), 'pl-10 appearance-none cursor-pointer')}
@@ -479,13 +505,13 @@ export default function CommanderPage() {
                   </div>
                 </div>
 
-                <div className="h-px bg-[rgba(107,174,229,0.08)]" />
+                <div className="h-px bg-[#E2E8F2]" />
 
                 {/* Bloc présence en ligne */}
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-widest text-[#2d2d60] mb-3 flex items-center gap-2">
                     <Globe className="w-3.5 h-3.5" /> Présence en ligne
-                    <span className="ml-1 text-[10px] font-medium text-[#2d2d60]/50 normal-case tracking-normal">(facultatif)</span>
+                    <span className="ml-1 text-[10px] font-medium text-[#6B7280] normal-case tracking-normal">(facultatif mais recommandé)</span>
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -562,13 +588,14 @@ export default function CommanderPage() {
                     return (
                       <button key={svc.id} onClick={() => setData(d => ({ ...d, serviceId: svc.id }))}
                         className={cn(
-                          'relative text-left rounded-xl border p-4 transition-all duration-200 group',
-                          active ? 'bg-[rgba(106,174,229,0.1)] border-[rgba(106,174,229,0.4)]'
-                                 : 'bg-[#1D2240] border-[rgba(107,174,229,0.1)] hover:border-[rgba(107,174,229,0.25)] hover:bg-[#222848]'
+                          'relative text-left rounded-xl border-l-4 border p-4 transition-all duration-200 group',
+                          active ? 'bg-[#EFF6FF] border-l-[#6AAEE5] border-[#6AAEE5]/40'
+                                 : 'bg-white border-l-transparent border-[#E2E8F2] hover:border-[#6AAEE5]/25 hover:bg-[#FAFBFD]'
                         )}
+                        style={{ borderLeftColor: active ? svc.iconColor : svc.iconColor }}
                       >
                         {svc.popular && !active && (
-                          <span className="absolute top-3 right-3 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[rgba(106,174,229,0.15)] text-[#6AAEE5] border border-[rgba(106,174,229,0.3)]">
+                          <span className="absolute top-3 right-3 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#6AAEE5]/10 text-[#6AAEE5] border border-[#6AAEE5]/30">
                             Populaire
                           </span>
                         )}
@@ -578,18 +605,25 @@ export default function CommanderPage() {
                           </div>
                         )}
                         <div className="flex items-start gap-3">
-                          <div className="flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0 mt-0.5"
+                          <div className="flex items-center justify-center w-12 h-12 rounded-lg flex-shrink-0 mt-0.5"
                             style={{ background: `${svc.iconColor}18` }}>
-                            <Icon className="w-4 h-4" style={{ color: svc.iconColor }} strokeWidth={1.75} />
+                            <Icon className="w-5 h-5" style={{ color: svc.iconColor }} strokeWidth={1.75} />
                           </div>
                           <div className="min-w-0">
-                            <p className={cn('text-[13px] font-semibold mb-0.5', active ? 'text-[#F0F2FF]' : 'text-[#8B95C4] group-hover:text-[#F0F2FF]')}>
-                              {svc.name}
-                            </p>
-                            <p className="text-[11px] text-[#4A5180] leading-relaxed">{svc.description}</p>
-                            <p className="text-[12px] font-semibold mt-2" style={{ color: svc.iconColor }}>
-                              {formatPrice(svc.price)}{svc.type === 'subscription' ? '/mois' : ''}
-                            </p>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <p className={cn('text-[13px] font-semibold', active ? 'text-[#2d2d60]' : 'text-[#6B7280] group-hover:text-[#2d2d60]')}>
+                                {svc.name}
+                              </p>
+                              <p className="text-[14px] font-bold" style={{ color: svc.iconColor }}>
+                                {formatPrice(svc.price)}{svc.type === 'subscription' ? '/mois' : ''}
+                              </p>
+                            </div>
+                            <p className="text-[11px] text-[#6B7280] leading-relaxed">{svc.description}</p>
+                            {svc.engagement && (
+                              <span className="inline-flex items-center mt-2 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30">
+                                Engagement {svc.engagement}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </button>
@@ -611,49 +645,254 @@ export default function CommanderPage() {
                 <StepHeader icon={FileText} color="#8B5CF6" title="Brief du projet"
                   subtitle="Décrivez le projet, les objectifs et les accès nécessaires." />
 
-                <FieldWrapper label="Description du projet" required error={form3.formState.errors.brief?.message}>
+                <FieldWrapper label="Description du projet" required error={form3.formState.errors.brief?.message}
+                  info="Plus votre brief est détaillé, meilleur sera le résultat">
                   <textarea
                     {...form3.register('brief')}
                     rows={5}
                     className={cn(inputBase, 'resize-none leading-relaxed', form3.formState.errors.brief && inputErr)}
-                    placeholder={`Décrivez le projet en détail :
-— Contexte et besoins
-— Style souhaité, références visuelles
-— Contraintes techniques ou délais`}
+                    placeholder="Décrivez le projet du client : son activité, sa cible, ses attentes, les résultats espérés..."
                   />
-                  <p className="text-[11px] text-[#4A5180] text-right mt-1">
+                  <p className="text-[11px] text-[#9CA3AF] text-right mt-1">
                     {form3.watch('brief')?.length ?? 0} / 20 min
                   </p>
                 </FieldWrapper>
 
-                <FieldWrapper label="Objectifs" error={form3.formState.errors.objectives?.message}>
-                  <div className="relative">
-                    <Target className="absolute left-3.5 top-3.5 w-4 h-4 text-[#4A5180] pointer-events-none" />
+                {/* ── Objectifs : chips sélectionnables + texte libre ── */}
+                <FieldWrapper label="Objectif du client" error={form3.formState.errors.objectives?.message}
+                  info="Sélectionnez les objectifs puis précisez les détails ci-dessous">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        'Générer des leads qualifiés',
+                        'Augmenter le chiffre d\'affaires',
+                        'Obtenir plus de clients',
+                        'Augmenter la visibilité',
+                        'Trafic vers site web',
+                        'Promouvoir une offre',
+                        'Remplir un agenda (RDV)',
+                        'Ventes directes',
+                        'Notoriété locale',
+                        'Clientèle ciblée',
+                        'Nouvelle entreprise / ouverture',
+                        'Relancer l\'activité',
+                        'Messages WhatsApp / appels',
+                        'Abonnés réseaux sociaux',
+                        'Tester un nouveau marché',
+                      ].map(obj => {
+                        const current = form3.watch('objectives') ?? ''
+                        const isSelected = current.includes(obj)
+                        return (
+                          <button key={obj} type="button"
+                            onClick={() => {
+                              const cur = form3.getValues('objectives') ?? ''
+                              if (cur.includes(obj)) {
+                                form3.setValue('objectives', cur.replace(obj, '').replace(/\n{2,}/g, '\n').trim())
+                              } else {
+                                form3.setValue('objectives', cur ? `${cur}\n${obj}` : obj)
+                              }
+                            }}
+                            className={cn(
+                              'px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-all',
+                              isSelected
+                                ? 'bg-[#6AAEE5]/10 border-[#6AAEE5]/40 text-[#2d2d60]'
+                                : 'bg-white border-[#E2E8F2] text-[#6B7280] hover:border-[#6AAEE5]/30 hover:text-[#2d2d60]'
+                            )}
+                          >
+                            {isSelected && <span className="mr-1">✓</span>}{obj}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Conversion + Horizon */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4a81a4] mb-2">Type de conversion attendu</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {['Formulaire', 'Appel', 'WhatsApp', 'Achat direct', 'Prise de RDV', 'Visite magasin', 'Trafic site web'].map(conv => {
+                            const cur = data.conversionType ?? ''
+                            const sel = cur.includes(conv)
+                            return (
+                              <button key={conv} type="button"
+                                onClick={() => setData(d => ({
+                                  ...d,
+                                  conversionType: sel
+                                    ? (d.conversionType ?? '').replace(conv, '').replace(/, {2,}/g, ', ').replace(/^, |, $/g, '').trim()
+                                    : (d.conversionType ? `${d.conversionType}, ${conv}` : conv)
+                                }))}
+                                className={cn(
+                                  'px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all',
+                                  sel ? 'bg-[#22C55E]/10 border-[#22C55E]/40 text-[#166534]'
+                                      : 'bg-white border-[#E2E8F2] text-[#6B7280] hover:border-[#22C55E]/30'
+                                )}
+                              >
+                                {sel && <span className="mr-0.5">✓</span>}{conv}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#4a81a4] mb-2">Horizon</p>
+                        <div className="flex gap-2">
+                          {['Court terme', 'Moyen terme', 'Long terme'].map(h => (
+                            <button key={h} type="button"
+                              onClick={() => setData(d => ({ ...d, horizon: h }))}
+                              className={cn(
+                                'px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all flex-1 text-center',
+                                data.horizon === h
+                                  ? 'bg-[#8B5CF6]/10 border-[#8B5CF6]/40 text-[#5B21B6]'
+                                  : 'bg-white border-[#E2E8F2] text-[#6B7280] hover:border-[#8B5CF6]/30'
+                              )}
+                            >
+                              {h}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Texte libre */}
                     <textarea
                       {...form3.register('objectives')}
                       rows={3}
-                      className={cn(inputBase, 'resize-none leading-relaxed pl-10')}
-                      placeholder={`Ex : Augmenter les demandes de devis de 30%
-Améliorer la visibilité sur Google
-Moderniser l'image de marque`}
+                      className={cn(inputBase, 'resize-none leading-relaxed')}
+                      placeholder="Précisez ici les détails : résultat attendu, objectifs secondaires..."
+                    />
+                  </div>
+                </FieldWrapper>
+
+                {/* ── Demandes spécifiques : cards catégories + texte libre ── */}
+                <FieldWrapper label="Demandes spécifiques du client" error={form3.formState.errors.specificRequest?.message}
+                  info="Sélectionnez les catégories concernées puis précisez les détails">
+                  <div className="space-y-3">
+                    {/* Category cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {[
+                        { id: 'video', label: 'Tournage / Vidéo', color: '#EF4444', items: ['Profil homme/femme', 'Âge spécifique', 'Style pro/naturel/dynamique', 'Lieu de tournage', 'Délai urgent', 'Montrer équipe/locaux/produits'] },
+                        { id: 'web', label: 'Site web / Landing', color: '#6AAEE5', items: ['Structure spécifique', 'Offre à mettre en avant', 'Charte graphique', 'Exemples de sites', 'Sections obligatoires'] },
+                        { id: 'com', label: 'Style de communication', color: '#F59E0B', items: ['Ton pro/décontracté/dynamique', 'Orientation premium/corporate', 'Langue FR/NL/EN', 'Vocabulaire spécifique'] },
+                        { id: 'campaign', label: 'Objectifs campagne', color: '#8B5CF6', items: ['Offre précise à promouvoir', 'Clientèle ciblée', 'Branding ou conversion'] },
+                      ].map(cat => {
+                        const isOpen = (data as Record<string, unknown>)[`spec_${cat.id}`] === true
+                        return (
+                          <div key={cat.id}
+                            className={cn(
+                              'rounded-xl border overflow-hidden transition-all',
+                              isOpen ? 'border-l-4 bg-white shadow-sm' : 'border-[#E2E8F2] bg-white hover:shadow-sm'
+                            )}
+                            style={isOpen ? { borderLeftColor: cat.color } : undefined}
+                          >
+                            <button type="button"
+                              onClick={() => setData(d => ({ ...d, [`spec_${cat.id}`]: !isOpen }))}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                            >
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: cat.color }} />
+                              <span className="text-[13px] font-semibold text-[#2d2d60] flex-1">{cat.label}</span>
+                              <ChevronRight className={cn('w-3.5 h-3.5 text-[#9CA3AF] transition-transform', isOpen && 'rotate-90')} />
+                            </button>
+                            {isOpen && (
+                              <div className="px-4 pb-3 space-y-2">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {cat.items.map(item => {
+                                    const curSpec = form3.getValues('specificRequest') ?? ''
+                                    const sel = curSpec.includes(item)
+                                    return (
+                                      <button key={item} type="button"
+                                        onClick={() => {
+                                          const cur = form3.getValues('specificRequest') ?? ''
+                                          if (cur.includes(item)) {
+                                            form3.setValue('specificRequest', cur.replace(item, '').replace(/\n{2,}/g, '\n').trim())
+                                          } else {
+                                            form3.setValue('specificRequest', cur ? `${cur}\n${item}` : item)
+                                          }
+                                        }}
+                                        className={cn(
+                                          'px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all',
+                                          sel ? 'bg-[rgba(106,174,229,0.1)] border-[#6AAEE5]/40 text-[#2d2d60]'
+                                              : 'bg-[#F5F7FA] border-[#E2E8F2] text-[#6B7280] hover:border-[#6AAEE5]/30'
+                                        )}
+                                      >
+                                        {sel ? '✓ ' : ''}{item}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Contraintes */}
+                    <div className="p-3 rounded-xl bg-[#FEF3C7]/50 border border-[#F59E0B]/20">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#92400E] mb-1.5">Contraintes importantes</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {['Éléments à éviter', 'Mentions légales obligatoires', 'Infos à intégrer', 'Demandes particulières'].map(c => {
+                          const curSpec = form3.getValues('specificRequest') ?? ''
+                          const sel = curSpec.includes(c)
+                          return (
+                            <button key={c} type="button"
+                              onClick={() => {
+                                const cur = form3.getValues('specificRequest') ?? ''
+                                form3.setValue('specificRequest', cur.includes(c) ? cur.replace(c, '').trim() : (cur ? `${cur}\n${c}` : c))
+                              }}
+                              className={cn(
+                                'px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all',
+                                sel ? 'bg-[#F59E0B]/10 border-[#F59E0B]/40 text-[#92400E]'
+                                    : 'bg-white border-[#E2E8F2] text-[#6B7280] hover:border-[#F59E0B]/30'
+                              )}
+                            >
+                              {sel ? '✓ ' : ''}{c}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Texte libre */}
+                    <textarea
+                      {...form3.register('specificRequest')}
+                      rows={4}
+                      className={cn(inputBase, 'resize-none leading-relaxed')}
+                      placeholder="Précisez ici tous les détails supplémentaires : préférences visuelles, contraintes, demandes particulières du client..."
                     />
                   </div>
                 </FieldWrapper>
 
                 <FieldWrapper label="Accès nécessaires" error={form3.formState.errors.requiredAccess?.message}>
                   <div className="relative">
-                    <Key className="absolute left-3.5 top-3.5 w-4 h-4 text-[#4A5180] pointer-events-none" />
+                    <Key className="absolute left-3.5 top-3.5 w-4 h-4 text-[#4a81a4] pointer-events-none" />
                     <textarea
                       {...form3.register('requiredAccess')}
-                      rows={3}
+                      rows={6}
                       className={cn(inputBase, 'resize-none leading-relaxed pl-10')}
-                      placeholder={`Ex : Accès Google Analytics
-Identifiants CMS (WordPress, Shopify…)
-Accès hébergeur / FTP
-Compte Google Search Console`}
+                      placeholder={`ID Instagram : .....
+Mot de passe Instagram : .....
+ID page publicitaire Meta (Facebook) : .....
+Mot de passe Meta (Facebook) : .....
+Accès Google Analytics : .....
+Accès hébergement / CMS : .....`}
                     />
                   </div>
                 </FieldWrapper>
+
+                {/* Domain name — conditional on site services */}
+                {(data.serviceId === 'site-onepage' || data.serviceId === 'site-complet') && (
+                  <FieldWrapper label="Nom de domaine souhaité" error={form3.formState.errors.domainName?.message}>
+                    <InputWithIcon
+                      icon={Globe}
+                      {...form3.register('domainName')}
+                      className={inputCls()}
+                      placeholder="ex: mon-entreprise.com"
+                    />
+                    <p className="text-[11px] text-[#F59E0B] mt-1">
+                      Vérifiez la disponibilité sur GoDaddy.com ou OVH.com avant de commander
+                    </p>
+                  </FieldWrapper>
+                )}
 
                 <NavButtons onNext={handleStep3} onPrev={() => go(-1)} />
               </div>
@@ -662,37 +901,48 @@ Compte Google Search Console`}
             {/* ── STEP 4: Fichiers ── */}
             {current === 4 && (
               <div className="space-y-6">
-                <StepHeader icon={Upload} color="#F59E0B" title="Fichiers & assets"
-                  subtitle="Uploadez les fichiers nécessaires (logo, images, documents…)" />
+                <StepHeader icon={Upload} color="#F59E0B" title="Fichiers & documents"
+                  subtitle="Téléchargez les fichiers nécessaires au projet" />
                 <div
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                   onDragLeave={() => setDragOver(false)}
                   onDrop={handleFileDrop}
                   className={cn(
                     'border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-200 cursor-pointer',
-                    dragOver ? 'border-[#6AAEE5] bg-[rgba(106,174,229,0.08)]'
-                             : 'border-[rgba(107,174,229,0.2)] hover:border-[rgba(107,174,229,0.4)] hover:bg-[rgba(107,174,229,0.03)]'
+                    dragOver ? 'border-[#6AAEE5] bg-[#EFF6FF]'
+                             : 'border-[#E2E8F2] hover:border-[#6AAEE5]/40 hover:bg-[#FAFBFD]'
                   )}
                   onClick={() => document.getElementById('file-input')?.click()}
                 >
                   <input id="file-input" type="file" multiple className="hidden"
                     onChange={e => setData(d => ({ ...d, files: [...(d.files ?? []), ...Array.from(e.target.files ?? [])] }))} />
-                  <Upload className={cn('w-8 h-8 mx-auto mb-3 transition-colors', dragOver ? 'text-[#6AAEE5]' : 'text-[#4A5180]')} />
-                  <p className="text-sm font-medium text-[#8B95C4]">{dragOver ? 'Relâchez pour déposer' : 'Glissez-déposez vos fichiers ici'}</p>
-                  <p className="text-[11px] text-[#4A5180] mt-1">ou <span className="text-[#6AAEE5] underline">parcourir</span> — PNG, JPG, PDF, AI, ZIP</p>
+                  <Upload className={cn('w-8 h-8 mx-auto mb-3 transition-colors', dragOver ? 'text-[#6AAEE5]' : 'text-[#9CA3AF]')} />
+                  <p className="text-sm font-medium text-[#2d2d60]">{dragOver ? 'Relâchez pour déposer' : 'Glissez-déposez vos fichiers ici'}</p>
+                  <p className="text-[11px] text-[#6B7280] mt-1">ou <span className="text-[#6AAEE5] underline">parcourir</span> pour télécharger</p>
                 </div>
+
+                <div className="space-y-2">
+                  <p className="text-[12px] text-[#6B7280] leading-relaxed">
+                    Un logo en bonne qualité nous aidera pour les montages et les couleurs.<br />
+                    Formats acceptés : PNG, JPG, PDF, Word, PowerPoint
+                  </p>
+                  <p className="text-[12px] text-[#9CA3AF] leading-relaxed">
+                    Vous pouvez télécharger : une présentation commerciale du client, une présentation de ses offres, un brief existant, des exemples de design appréciés...
+                  </p>
+                </div>
+
                 {(data.files?.length ?? 0) > 0 && (
                   <div className="space-y-2">
                     {data.files!.map((file, i) => (
-                      <div key={i} className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#1D2240] border border-[rgba(107,174,229,0.1)]">
-                        <div className="w-7 h-7 rounded-lg bg-[rgba(106,174,229,0.1)] flex items-center justify-center flex-shrink-0">
+                      <div key={i} className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white border border-[#E2E8F2]">
+                        <div className="w-7 h-7 rounded-lg bg-[#6AAEE5]/10 flex items-center justify-center flex-shrink-0">
                           <FileText className="w-3.5 h-3.5 text-[#6AAEE5]" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium text-[#F0F2FF] truncate">{file.name}</p>
-                          <p className="text-[11px] text-[#4A5180]">{(file.size / 1024).toFixed(0)} KB</p>
+                          <p className="text-[13px] font-medium text-[#2d2d60] truncate">{file.name}</p>
+                          <p className="text-[11px] text-[#9CA3AF]">{(file.size / 1024).toFixed(0)} KB</p>
                         </div>
-                        <button onClick={() => removeFile(i)} className="p-1 rounded-lg text-[#4A5180] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        <button onClick={() => removeFile(i)} className="p-1 rounded-lg text-[#9CA3AF] hover:text-red-400 hover:bg-red-500/10 transition-colors">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -740,15 +990,16 @@ Compte Google Search Console`}
 
                 <div className="space-y-1">
                   {/* Client */}
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#4A5180] pb-1 mb-1">Contact client</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">Contact client</p>
                   <SummaryRow label="Nom client"   value={data.clientName  ?? '—'} />
                   <SummaryRow label="Email client" value={data.clientEmail ?? '—'} />
                   {data.clientPhone && <SummaryRow label="Téléphone" value={data.clientPhone} />}
+                  {data.whatsappGroup && <SummaryRow label="Groupe WhatsApp" value={data.whatsappGroup} />}
 
-                  <div className="h-px bg-[rgba(107,174,229,0.08)] my-2" />
+                  <div className="h-px bg-[#E2E8F2] my-2" />
 
                   {/* Entreprise */}
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#4A5180] pb-1 mb-1">Entreprise</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">Entreprise</p>
                   <SummaryRow label="Nom entreprise"   value={data.companyName  ?? '—'} />
                   {data.companyEmail && <SummaryRow label="Email entreprise" value={data.companyEmail} />}
                   {data.sector      && <SummaryRow label="Secteur"           value={data.sector} />}
@@ -757,8 +1008,8 @@ Compte Google Search Console`}
                   {/* Présence en ligne */}
                   {(data.website || data.instagram || data.facebook || data.tiktok) && (
                     <>
-                      <div className="h-px bg-[rgba(107,174,229,0.08)] my-2" />
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#4A5180] pb-1 mb-1">Présence en ligne</p>
+                      <div className="h-px bg-[#E2E8F2] my-2" />
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">Présence en ligne</p>
                       {data.website   && <SummaryRow label="Site web"   value={data.website} />}
                       {data.instagram && <SummaryRow label="Instagram"  value={data.instagram} />}
                       {data.facebook  && <SummaryRow label="Facebook"   value={data.facebook} />}
@@ -766,10 +1017,10 @@ Compte Google Search Console`}
                     </>
                   )}
 
-                  <div className="h-px bg-[rgba(107,174,229,0.08)] my-2" />
+                  <div className="h-px bg-[#E2E8F2] my-2" />
 
                   {/* Service */}
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#4A5180] pb-1 mb-1">Service</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">Service</p>
                   <SummaryRow label="Service"  value={selectedService?.name ?? '—'} />
                   <SummaryRow label="Paiement" value={data.paymentMode === 'subscription' ? 'Abonnement mensuel' : 'Paiement unique'} />
                   <SummaryRow label="Montant"
@@ -781,24 +1032,36 @@ Compte Google Search Console`}
                   {/* Brief */}
                   {data.brief && (
                     <>
-                      <div className="h-px bg-[rgba(107,174,229,0.08)] my-2" />
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#4A5180] pb-1">Projet</p>
+                      <div className="h-px bg-[#E2E8F2] my-2" />
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1">Projet</p>
                       <div className="py-1.5">
-                        <span className="text-[11px] font-semibold uppercase tracking-widest text-[#4A5180]">Description</span>
-                        <p className="text-[13px] text-[#8B95C4] mt-1 leading-relaxed line-clamp-3">{data.brief}</p>
+                        <span className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280]">Description</span>
+                        <p className="text-[13px] text-[#2d2d60] mt-1 leading-relaxed line-clamp-3">{data.brief}</p>
                       </div>
                     </>
                   )}
                   {data.objectives && (
                     <div className="py-1.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#4A5180]">Objectifs</span>
-                      <p className="text-[13px] text-[#8B95C4] mt-1 leading-relaxed line-clamp-2">{data.objectives}</p>
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280]">Objectifs</span>
+                      <p className="text-[13px] text-[#2d2d60] mt-1 leading-relaxed line-clamp-2">{data.objectives}</p>
+                    </div>
+                  )}
+                  {data.specificRequest && (
+                    <div className="py-1.5">
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280]">Demande spécifique</span>
+                      <p className="text-[13px] text-[#2d2d60] mt-1 leading-relaxed line-clamp-2">{data.specificRequest}</p>
                     </div>
                   )}
                   {data.requiredAccess && (
                     <div className="py-1.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#4A5180]">Accès nécessaires</span>
-                      <p className="text-[13px] text-[#8B95C4] mt-1 leading-relaxed line-clamp-2">{data.requiredAccess}</p>
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280]">Accès nécessaires</span>
+                      <p className="text-[13px] text-[#2d2d60] mt-1 leading-relaxed line-clamp-2">{data.requiredAccess}</p>
+                    </div>
+                  )}
+                  {data.domainName && (
+                    <div className="py-1.5">
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280]">Nom de domaine</span>
+                      <p className="text-[13px] text-[#2d2d60] mt-1 leading-relaxed">{data.domainName}</p>
                     </div>
                   )}
                   {(data.files?.length ?? 0) > 0 && (
@@ -812,14 +1075,14 @@ Compte Google Search Console`}
                     onClick={handleSubmitOrder}
                     disabled={submitting}
                     className="w-full flex items-center justify-center gap-2.5 py-4 rounded-xl font-semibold text-white text-[15px] transition-all duration-200 hover:opacity-90 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
-                    style={{ background: 'linear-gradient(135deg, #6AAEE5 0%, #4A7DC4 50%, #2B3580 100%)', boxShadow: '0 0 32px rgba(106,174,229,0.3)' }}
+                    style={{ background: 'linear-gradient(135deg, #2d2d60 0%, #4A7DC4 50%, #6AAEE5 100%)', boxShadow: '0 0 32px rgba(106,174,229,0.3)' }}
                   >
                     {submitting
-                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement…</>
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement...</>
                       : <><CheckCircle2 className="w-4 h-4" /> Confirmer la commande <ChevronRight className="w-4 h-4" /></>
                     }
                   </button>
-                  <p className="text-center text-[11px] text-[#4A5180] mt-2.5">Le paiement Stripe sera activé prochainement</p>
+                  <p className="text-center text-[11px] text-[#9CA3AF] mt-2.5">Le paiement Stripe sera activé prochainement</p>
                 </div>
 
                 <NavButtons onPrev={() => go(-1)} hideNext />
@@ -836,13 +1099,13 @@ Compte Google Search Console`}
 // ─── Helpers ──────────────────────────────────────────────────
 function StepHeader({ icon: Icon, color, title, subtitle }: { icon: React.ElementType; color: string; title: string; subtitle: string }) {
   return (
-    <div className="flex items-start gap-4 pb-2 border-b border-[#2d2d60]/15">
-      <div className="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-[#2d2d60]/10">
+    <div className="flex items-start gap-4 pb-2 border-b border-[#E2E8F2]">
+      <div className="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-[#F5F7FA] border border-[#E2E8F2]">
         <Icon className="w-5 h-5 text-[#2d2d60]" strokeWidth={1.75} />
       </div>
       <div>
         <h2 className="text-lg font-semibold text-[#2d2d60]">{title}</h2>
-        <p className="text-sm text-[#2d2d60]/60">{subtitle}</p>
+        <p className="text-sm text-[#6B7280]">{subtitle}</p>
       </div>
     </div>
   )
@@ -853,15 +1116,15 @@ function NavButtons({ onNext, onPrev, nextDisabled, nextLabel = 'Continuer', dis
   nextLabel?: string; disablePrev?: boolean; hideNext?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between pt-4 border-t border-[#2d2d60]/15">
+    <div className="flex items-center justify-between pt-4 border-t border-[#E2E8F2]">
       <button onClick={onPrev} disabled={disablePrev}
-        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium text-[#2d2d60]/70 hover:text-[#2d2d60] hover:bg-[#2d2d60]/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium text-[#6B7280] hover:text-[#2d2d60] hover:bg-[#F5F7FA] disabled:opacity-30 disabled:cursor-not-allowed transition-all">
         <ChevronLeft className="w-4 h-4" /> Retour
       </button>
       {!hideNext && (
         <button onClick={onNext} disabled={nextDisabled}
-          className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: nextDisabled ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.95)', color: nextDisabled ? 'rgba(255,255,255,0.5)' : '#2d2d60' }}>
+          className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: nextDisabled ? '#9CA3AF' : 'linear-gradient(135deg, #2d2d60 0%, #4A7DC4 100%)' }}>
           {nextLabel} <ChevronRight className="w-4 h-4" />
         </button>
       )}
@@ -876,8 +1139,8 @@ function PaymentCard({ selected, onSelect, icon: Icon, title, description, price
   return (
     <button onClick={onSelect}
       className={cn('relative text-left rounded-xl border p-5 transition-all duration-200 w-full',
-        selected ? 'bg-[rgba(106,174,229,0.1)] border-[rgba(106,174,229,0.4)]'
-                 : 'bg-[#1D2240] border-[rgba(107,174,229,0.12)] hover:border-[rgba(107,174,229,0.3)]')}>
+        selected ? 'bg-[#EFF6FF] border-[#6AAEE5]/40'
+                 : 'bg-white border-[#E2E8F2] hover:border-[#6AAEE5]/30 hover:bg-[#FAFBFD]')}>
       {selected && (
         <div className="absolute top-4 right-4 w-5 h-5 rounded-full bg-[#6AAEE5] flex items-center justify-center">
           <Check className="w-3 h-3 text-white" strokeWidth={2.5} />
@@ -889,9 +1152,9 @@ function PaymentCard({ selected, onSelect, icon: Icon, title, description, price
       </span>
       <div className="flex items-center gap-2 mb-2">
         <Icon className="w-4 h-4" style={{ color: badgeColor }} strokeWidth={1.75} />
-        <p className="text-[14px] font-bold text-[#F0F2FF]">{title}</p>
+        <p className="text-[14px] font-bold text-[#2d2d60]">{title}</p>
       </div>
-      <p className="text-[12px] text-[#4A5180] leading-relaxed mb-3">{description}</p>
+      <p className="text-[12px] text-[#6B7280] leading-relaxed mb-3">{description}</p>
       <p className="text-[20px] font-bold" style={{ color: badgeColor }}>{price}</p>
     </button>
   )
@@ -900,8 +1163,8 @@ function PaymentCard({ selected, onSelect, icon: Icon, title, description, price
 function SummaryRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className="text-[12px] font-semibold uppercase tracking-widest text-[#4A5180]">{label}</span>
-      <span className={cn('text-[14px] font-semibold text-right max-w-[60%] truncate', highlight ? 'text-[#6AAEE5]' : 'text-[#F0F2FF]')}>
+      <span className="text-[12px] font-semibold uppercase tracking-widest text-[#6B7280]">{label}</span>
+      <span className={cn('text-[14px] font-semibold text-right max-w-[60%] truncate', highlight ? 'text-[#6AAEE5]' : 'text-[#2d2d60]')}>
         {value}
       </span>
     </div>

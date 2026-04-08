@@ -61,3 +61,101 @@ export interface KPI {
   delta?: string
   positive?: boolean
 }
+
+// ─── Devis & Factures (Secrétaire IA) ─────────────────────────
+
+export type DevisStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'invoiced'
+export type FactureStatus = 'unpaid' | 'paid' | 'overdue' | 'cancelled'
+
+export interface DevisItem {
+  id: string
+  devis_id: string
+  service_id?: string
+  description: string
+  quantity: number
+  unit_price: number
+  total: number
+  sort_order: number
+}
+
+export interface Devis {
+  id: string
+  user_id: string
+  ref: string
+  client_name: string
+  client_email?: string
+  client_phone?: string
+  company_name?: string
+  company_email?: string
+  vat_number?: string
+  client_address?: string
+  subtotal_ht: number
+  tva_rate: number
+  tva_amount: number
+  total_ttc: number
+  discount: number
+  status: DevisStatus
+  valid_until?: string
+  notes?: string
+  facture_id?: string
+  items?: DevisItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface FactureItem {
+  id: string
+  facture_id: string
+  service_id?: string
+  description: string
+  quantity: number
+  unit_price: number
+  total: number
+  sort_order: number
+}
+
+export interface Facture {
+  id: string
+  user_id: string
+  ref: string
+  devis_id?: string
+  client_name: string
+  client_email?: string
+  client_phone?: string
+  company_name?: string
+  company_email?: string
+  vat_number?: string
+  client_address?: string
+  subtotal_ht: number
+  tva_rate: number
+  tva_amount: number
+  total_ttc: number
+  discount: number
+  status: FactureStatus
+  payment_method?: string
+  paid_at?: string
+  due_date?: string
+  notes?: string
+  items?: FactureItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+  devis?: Devis
+  facture?: Facture
+}
+
+export interface ChatSession {
+  id: string
+  user_id: string
+  title: string
+  devis_id?: string
+  facture_id?: string
+  messages: ChatMessage[]
+  created_at: string
+  updated_at: string
+}

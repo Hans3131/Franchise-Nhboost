@@ -24,8 +24,12 @@ export interface LocalOrder {
   brief?:          string
   objectives?:     string
   required_access?: string
+  whatsapp_group?:  string
+  domain_name?:     string
+  specific_request?: string
   // Finance
   price:           number
+  cost:            number
   status:          'pending' | 'in_progress' | 'completed' | 'cancelled'
   payment_status:  'unpaid' | 'paid' | 'refunded'
   // Dates
@@ -75,9 +79,10 @@ export function update(id: string, patch: Partial<Omit<LocalOrder, 'id' | 'ref' 
 
 export function getStats() {
   const orders  = getAll()
-  // CA = uniquement les commandes finalisées (cohérent avec la page Projets)
-  const revenue = orders.filter(o => o.status === 'completed').reduce((s, o) => s + o.price, 0)
-  const costs   = Math.round(revenue * 0.64)
+  const completed = orders.filter(o => o.status === 'completed')
+  const revenue = completed.reduce((s, o) => s + o.price, 0)
+  // Coûts réels si renseignés, sinon fallback 64% du prix
+  const costs   = completed.reduce((s, o) => s + (o.cost > 0 ? o.cost : Math.round(o.price * 0.64)), 0)
   return {
     revenue,
     costs,

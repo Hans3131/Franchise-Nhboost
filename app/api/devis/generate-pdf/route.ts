@@ -1,0 +1,182 @@
+import { NextRequest, NextResponse } from 'next/server'
+import PDFDocument from 'pdfkit'
+import { createClient } from '@/lib/supabase/server'
+
+const NAVY = '#0F1229'
+const BLUE = '#6AAEE5'
+const DARK = '#161A34'
+const MUTED = '#8B95C4'
+const WHITE = '#FFFFFF'
+
+function generatePdf(devis: Record<string, unknown>, items: Record<string, unknown>[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 })
+    const chunks: Buffer[] = []
+    doc.on('data', (c: Buffer) => chunks.push(c))
+    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('error', reject)
+
+    const W = doc.page.width - 100 // content width
+
+    // ── Header bandeau ──────────────────────────────────
+    doc.rect(0, 0, doc.page.width, 80).fill(NAVY)
+    doc.fontSize(24).font('Helvetica-Bold').fillColor(WHITE)
+       .text('DEVIS', 50, 28, { width: W / 2 })
+    doc.fontSize(10).font('Helvetica').fillColor(BLUE)
+       .text(String(devis.ref ?? ''), 50 + W / 2, 28, { width: W / 2, align: 'right' })
+    doc.fontSize(9).fillColor(MUTED)
+       .text(new Date(String(devis.created_at)).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }),
+         50 + W / 2, 46, { width: W / 2, align: 'right' })
+
+    let y = 100
+
+    // ── Émetteur / Client ───────────────────────────────
+    const colW = W / 2 - 10
+
+    // Émetteur
+    doc.fontSize(8).font('Helvetica-Bold').fillColor(MUTED).text('ÉMETTEUR', 50, y)
+    y += 14
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(NAVY).text('NH Group SRL', 50, y)
+    y += 14
+    doc.fontSize(9).font('Helvetica').fillColor(DARK).text('Belgique', 50, y)
+    y += 12
+    doc.text('contact@nhboost.com', 50, y)
+
+    // Client
+    let cy = 100
+    doc.fontSize(8).font('Helvetica-Bold').fillColor(MUTED).text('CLIENT', 50 + colW + 20, cy)
+    cy += 14
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(NAVY).text(String(devis.client_name ?? ''), 50 + colW + 20, cy, { width: colW })
+    cy += 14
+    if (devis.company_name) { doc.fontSize(9).font('Helvetica').fillColor(DARK).text(String(devis.company_name), 50 + colW + 20, cy, { width: colW }); cy += 12 }
+    if (devis.client_email) { doc.text(String(devis.client_email), 50 + colW + 20, cy, { width: colW }); cy += 12 }
+    if (devis.client_phone) { doc.text(String(devis.client_phone), 50 + colW + 20, cy, { width: colW }); cy += 12 }
+    if (devis.vat_number)   { doc.text(`TVA: ${devis.vat_number}`, 50 + colW + 20, cy, { width: colW }); cy += 12 }
+    if (devis.client_address) { doc.text(String(devis.client_address), 50 + colW + 20, cy, { width: colW }); cy += 12 }
+
+    y = Math.max(y, cy) + 30
+
+    // ── Ligne de séparation ─────────────────────────────
+    doc.moveTo(50, y).lineTo(50 + W, y).strokeColor(BLUE).lineWidth(0.5).stroke()
+    y += 20
+
+    // ── Table header ────────────────────────────────────
+    const cols = [
+      { label: '#',               x: 50,        w: 30  },
+      { label: 'Description',     x: 80,        w: W - 220 },
+      { label: 'Qté',             x: W - 140,   w: 40  },
+      { label: 'Prix unit. HT',   x: W - 100,   w: 70  },
+      { label: 'Total HT',        x: W - 30,    w: 80  },
+    ]
+
+    doc.rect(50, y, W, 22).fill('#F0F2FF')
+    doc.fontSize(8).font('Helvetica-Bold').fillColor(NAVY)
+    cols.forEach(col => doc.text(col.label, col.x, y + 6, { width: col.w, align: col.label === '#' ? 'center' : 'left' }))
+    y += 28
+
+    // ── Table rows ──────────────────────────────────────
+    items.forEach((item, i) => {
+      if (y > 700) { doc.addPage(); y = 50 }
+      const bg = i % 2 === 0 ? WHITE : '#F8F9FC'
+      doc.rect(50, y, W, 20).fill(bg)
+      doc.fontSize(9).font('Helvetica').fillColor(DARK)
+      doc.text(String(i + 1), cols[0].x, y + 5, { width: cols[0].w, align: 'center' })
+      doc.text(String(item.description ?? ''), cols[1].x, y + 5, { width: cols[1].w })
+      doc.text(String(item.quantity ?? 1), cols[2].x, y + 5, { width: cols[2].w, align: 'center' })
+      doc.text(`€${Number(item.unit_price ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`, cols[3].x, y + 5, { width: cols[3].w, align: 'right' })
+      doc.font('Helvetica-Bold').text(`€${Number(item.total ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`, cols[4].x, y + 5, { width: cols[4].w, align: 'right' })
+      y += 22
+    })
+
+    y += 15
+
+    // ── Totals ──────────────────────────────────────────
+    const totX = W - 80
+    const discount = Number(devis.discount ?? 0)
+
+    doc.fontSize(9).font('Helvetica').fillColor(DARK)
+       .text('Sous-total HT', totX, y, { width: 100 })
+       .text(`€${Number(devis.subtotal_ht ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`, totX + 100, y, { width: 80, align: 'right' })
+    y += 16
+
+    if (discount > 0) {
+      doc.fillColor('#EF4444')
+         .text('Remise', totX, y, { width: 100 })
+         .text(`-€${discount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`, totX + 100, y, { width: 80, align: 'right' })
+      y += 16
+      doc.fillColor(DARK)
+    }
+
+    doc.text(`TVA ${devis.tva_rate ?? 21}%`, totX, y, { width: 100 })
+       .text(`€${Number(devis.tva_amount ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`, totX + 100, y, { width: 80, align: 'right' })
+    y += 18
+
+    doc.moveTo(totX, y).lineTo(totX + 180, y).strokeColor(NAVY).lineWidth(1).stroke()
+    y += 8
+
+    doc.fontSize(12).font('Helvetica-Bold').fillColor(NAVY)
+       .text('Total TTC', totX, y, { width: 100 })
+       .text(`€${Number(devis.total_ttc ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })}`, totX + 100, y, { width: 80, align: 'right' })
+    y += 30
+
+    // ── Validité ────────────────────────────────────────
+    if (devis.valid_until) {
+      doc.fontSize(9).font('Helvetica').fillColor(MUTED)
+         .text(`Devis valable jusqu'au ${new Date(String(devis.valid_until)).toLocaleDateString('fr-FR')}`, 50, y)
+      y += 16
+    }
+
+    // ── Notes ───────────────────────────────────────────
+    if (devis.notes) {
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(MUTED).text('NOTES', 50, y)
+      y += 12
+      doc.fontSize(9).font('Helvetica').fillColor(DARK).text(String(devis.notes), 50, y, { width: W })
+    }
+
+    // ── Footer ──────────────────────────────────────────
+    const footerY = doc.page.height - 40
+    doc.rect(0, footerY - 10, doc.page.width, 50).fill(NAVY)
+    doc.fontSize(7).font('Helvetica').fillColor(MUTED)
+       .text('Document généré par NHBoost — NH Group SRL — Confidentiel', 50, footerY, { width: W, align: 'center' })
+
+    doc.end()
+  })
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    }
+
+    const { devisId } = await req.json()
+    if (!devisId) return NextResponse.json({ error: 'devisId requis' }, { status: 400 })
+
+    const { data: devis, error } = await supabase
+      .from('devis')
+      .select('*')
+      .eq('id', devisId)
+      .eq('user_id', user.id)
+      .single()
+    if (error || !devis) return NextResponse.json({ error: 'Devis non trouvé' }, { status: 404 })
+
+    const { data: items } = await supabase
+      .from('devis_items')
+      .select('*')
+      .eq('devis_id', devisId)
+      .order('sort_order', { ascending: true })
+
+    const pdf = await generatePdf(devis, items ?? [])
+
+    return new Response(pdf, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${devis.ref}.pdf"`,
+      },
+    })
+  } catch {
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  }
+}

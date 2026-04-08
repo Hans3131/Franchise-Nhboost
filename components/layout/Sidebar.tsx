@@ -12,6 +12,7 @@ import {
   FolderOpen,
   HeadphonesIcon,
   BookOpen,
+  Bot,
   X,
   ChevronRight,
   Settings,
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils'
 const NAV_ITEMS = [
   { href: '/dashboard',  label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/commander',  label: 'Commander',        icon: ShoppingCart },
+  { href: '/secretaire', label: 'Secrétaire IA',    icon: Bot },
   { href: '/commandes',  label: 'Mes commandes',    icon: ClipboardList },
   { href: '/projets',    label: 'Projets',          icon: FolderOpen },
   { href: '/support',    label: 'Support',          icon: HeadphonesIcon },
@@ -89,9 +91,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   : 'text-[#8B95C4] hover:text-[#F0F2FF] hover:bg-[rgba(107,174,229,0.06)]'
               )}
             >
-              {/* Active indicator */}
+              {/* Active indicator — uses key to force remount on route change */}
               {active && (
                 <motion.div
+                  key={`indicator-${href}`}
                   layoutId="sidebar-active"
                   className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full bg-[#6AAEE5]"
                   transition={{ type: 'spring', stiffness: 500, damping: 35 }}

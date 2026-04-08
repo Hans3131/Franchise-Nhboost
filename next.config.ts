@@ -29,7 +29,7 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['pdfkit', 'nodemailer', 'sharp'],
+  serverExternalPackages: ['pdfkit', 'nodemailer', 'sharp', '@anthropic-ai/sdk'],
 
   async headers() {
     return [

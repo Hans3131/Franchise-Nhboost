@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User, Lock, Building2, Phone, MapPin,
-  CheckCircle2, AlertCircle, Loader2, LogOut, Shield,
+  CheckCircle2, AlertCircle, Loader2, LogOut,
   ChevronRight, Eye, EyeOff,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -200,8 +200,8 @@ export default function ParametresPage() {
     router.push('/login')
   }
 
-  const savedProfile = loadProfile()
-  const displayName  = profileForm.watch('company_name') || savedProfile.company_name || 'Votre entreprise'
+  const watchedName  = profileForm.watch('company_name')
+  const displayName  = watchedName || 'Votre entreprise'
   const initials     = displayName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'F1'
 
   return (
@@ -223,11 +223,8 @@ export default function ParametresPage() {
           {initials}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-bold text-[#F0F2FF] truncate">{displayName}</p>
+          <p className="text-[15px] font-bold text-black truncate">{displayName}</p>
           <p className="text-[13px] text-[#8B95C4] truncate">{email}</p>
-          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[rgba(106,174,229,0.12)] text-[#6AAEE5] text-[11px] font-medium">
-            <Shield className="w-3 h-3" /> Franchisé actif
-          </span>
         </div>
         <ChevronRight className="w-4 h-4 text-[#4A5180] flex-shrink-0" />
       </motion.div>

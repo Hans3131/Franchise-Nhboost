@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#0A0B14]">
+    <div className="h-screen overflow-hidden bg-white">
       {children}
     </div>
   )

@@ -14,7 +14,7 @@ const env = {
 }
 
 const next = resolve(__dirname, 'node_modules/.bin/next')
-const child = spawn(process.execPath, [next, 'start'], {
+const child = spawn(process.execPath, [next, 'dev'], {
   env,
   stdio: 'inherit',
   cwd: __dirname,

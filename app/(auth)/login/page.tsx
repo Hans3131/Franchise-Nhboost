@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Mail, Lock, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -26,7 +27,48 @@ type ResetForm = z.infer<typeof resetSchema>
 
 type View = 'login' | 'reset' | 'reset-sent'
 
-// ─── Floating label input ─────────────────────────────────────
+// ─── Floating orbs (animated background) ─────────────────────
+function FloatingOrbs() {
+  const orbs = [
+    { size: 340, x: '15%',  y: '20%',  color: '#6AAEE5', opacity: 0.08, duration: 20, delay: 0 },
+    { size: 260, x: '75%',  y: '60%',  color: '#2B3580', opacity: 0.06, duration: 25, delay: 2 },
+    { size: 200, x: '60%',  y: '10%',  color: '#6AAEE5', opacity: 0.05, duration: 22, delay: 4 },
+    { size: 180, x: '25%',  y: '75%',  color: '#4a81a4', opacity: 0.07, duration: 18, delay: 1 },
+  ]
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {orbs.map((orb, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            width: orb.size,
+            height: orb.size,
+            left: orb.x,
+            top: orb.y,
+            background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
+            opacity: orb.opacity,
+            filter: `blur(${orb.size * 0.35}px)`,
+          }}
+          animate={{
+            x: [0, 30, -20, 15, 0],
+            y: [0, -25, 15, -10, 0],
+            scale: [1, 1.1, 0.95, 1.05, 1],
+          }}
+          transition={{
+            duration: orb.duration,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            delay: orb.delay,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// ─── Input field ──────────────────────────────────────────────
 function Field({
   label,
   icon: Icon,
@@ -43,21 +85,21 @@ function Field({
 } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-[11px] font-semibold uppercase tracking-widest text-[#4A5180]">
+      <label className="block text-[11px] font-semibold uppercase tracking-widest text-[#4a81a4]">
         {label}
       </label>
       <div className="relative">
         <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
-          <Icon className={cn('w-4 h-4 transition-colors', error ? 'text-[#EF4444]' : 'text-[#4A5180]')} />
+          <Icon className={cn('w-4 h-4 transition-colors', error ? 'text-[#EF4444]' : 'text-[#9CA3AF]')} />
         </div>
         <input
           type={type}
           className={cn(
-            'w-full pl-10 pr-10 py-3 rounded-xl bg-[#1D2240] text-[14px] text-[#F0F2FF] placeholder:text-[#4A5180]',
-            'border transition-all duration-200 focus:outline-none',
+            'w-full pl-10 pr-10 py-2.5 sm:py-3 rounded-xl bg-[#F5F7FA] text-[16px] text-[#2d2d60] placeholder:text-[#9CA3AF]',
+            'border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[rgba(106,174,229,0.2)]',
             error
-              ? 'border-[rgba(239,68,68,0.4)] focus:border-[rgba(239,68,68,0.7)]'
-              : 'border-[rgba(107,174,229,0.15)] focus:border-[rgba(106,174,229,0.4)] focus:bg-[#1D2240]'
+              ? 'border-[rgba(239,68,68,0.4)] focus:border-[#EF4444]'
+              : 'border-[#E2E8F2] focus:border-[#6AAEE5] focus:bg-white'
           )}
           {...props}
         />
@@ -90,14 +132,13 @@ export default function LoginPage() {
   const [view, setView] = useState<View>('login')
   const [showPassword, setShowPassword] = useState(false)
   const [loginError, setLoginError] = useState('')
+  const [remember, setRemember] = useState(false)
 
-  // Login form
   const loginForm = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   })
 
-  // Reset form
   const resetForm = useForm<ResetForm>({
     resolver: zodResolver(resetSchema),
     defaultValues: { email: '' },
@@ -123,50 +164,52 @@ export default function LoginPage() {
     await supabase.auth.resetPasswordForEmail(data.email, {
       redirectTo: `${window.location.origin}/login`,
     })
-    // Always show success (security: don't reveal if email exists)
     setView('reset-sent')
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="h-screen overflow-hidden flex flex-col items-center justify-center px-4 py-2 sm:p-4 relative">
 
-      {/* Background glow */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-[#2B3580]/20 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[300px] bg-[#6AAEE5]/8 rounded-full blur-[100px]" />
-      </div>
+      {/* Animated background orbs */}
+      <FloatingOrbs />
 
-      {/* Grid overlay */}
+      {/* Subtle grid */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.025]"
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
         style={{
-          backgroundImage: `linear-gradient(rgba(106,174,229,1) 1px, transparent 1px), linear-gradient(90deg, rgba(106,174,229,1) 1px, transparent 1px)`,
-          backgroundSize: '40px 40px',
+          backgroundImage: `linear-gradient(#6AAEE5 1px, transparent 1px), linear-gradient(90deg, #6AAEE5 1px, transparent 1px)`,
+          backgroundSize: '48px 48px',
         }}
       />
 
       {/* Logo */}
       <motion.div
-        initial={{ opacity: 0, y: -12 }}
+        initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col items-center mb-8 relative z-10"
+        transition={{ duration: 0.5 }}
+        className="flex flex-col items-center mb-4 sm:mb-6 relative z-10"
       >
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#6AAEE5] to-[#2B3580] flex items-center justify-center mb-3 shadow-lg shadow-[#6AAEE5]/20">
-          <span className="text-white font-bold text-lg tracking-tight">NH</span>
-        </div>
-        <span className="text-[#F0F2FF] font-bold text-xl tracking-tight">NHBoost</span>
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-[#4A5180] mt-0.5">Portail Franchisé</span>
+        <Image
+          src="/logo.png"
+          alt="NHBoost"
+          width={200}
+          height={60}
+          className="w-32 sm:w-44 h-auto"
+          priority
+        />
+        <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-[#4a81a4] mt-1.5">
+          Portail Franchisé
+        </span>
       </motion.div>
 
       {/* Card */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
         className="relative z-10 w-full max-w-sm"
       >
-        <div className="rounded-2xl bg-[#161A34] border border-[rgba(107,174,229,0.15)] p-7 shadow-2xl shadow-black/40">
+        <div className="rounded-2xl bg-white border border-[#E2E8F2] px-5 py-4 sm:p-7 shadow-xl shadow-[rgba(106,174,229,0.08)]">
 
           <AnimatePresence mode="wait">
 
@@ -179,15 +222,16 @@ export default function LoginPage() {
                 exit={{ opacity: 0, x: 16 }}
                 transition={{ duration: 0.2 }}
               >
-                <h1 className="text-xl font-bold text-[#F0F2FF] mb-1">Connexion</h1>
-                <p className="text-[13px] text-[#8B95C4] mb-6">Accédez à votre espace franchisé.</p>
+                <h1 className="text-lg sm:text-xl font-bold text-[#2d2d60] mb-0.5">Connexion</h1>
+                <p className="text-[12px] sm:text-[13px] text-[#6B7280] mb-4">Accédez à votre espace franchisé.</p>
 
-                <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
+                <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-3 sm:space-y-4">
                   <Field
                     label="Email"
                     icon={Mail}
                     type="email"
                     placeholder="vous@nhboost.com"
+                    autoComplete="email"
                     error={loginForm.formState.errors.email?.message}
                     {...loginForm.register('email')}
                   />
@@ -197,12 +241,13 @@ export default function LoginPage() {
                     icon={Lock}
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
+                    autoComplete="current-password"
                     error={loginForm.formState.errors.password?.message}
                     rightSlot={
                       <button
                         type="button"
                         onClick={() => setShowPassword(v => !v)}
-                        className="text-[#4A5180] hover:text-[#8B95C4] transition-colors"
+                        className="text-[#9CA3AF] hover:text-[#4a81a4] transition-colors"
                         tabIndex={-1}
                       >
                         {showPassword
@@ -221,7 +266,7 @@ export default function LoginPage() {
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
-                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.2)]"
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[rgba(239,68,68,0.06)] border border-[rgba(239,68,68,0.15)]"
                       >
                         <AlertCircle className="w-3.5 h-3.5 text-[#EF4444] flex-shrink-0" />
                         <p className="text-[12px] text-[#EF4444]">{loginError}</p>
@@ -229,15 +274,26 @@ export default function LoginPage() {
                     )}
                   </AnimatePresence>
 
-                  {/* Forgot password */}
-                  <div className="flex justify-end">
+                  {/* Remember + Forgot */}
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer select-none group">
+                      <input
+                        type="checkbox"
+                        checked={remember}
+                        onChange={e => setRemember(e.target.checked)}
+                        className="w-4 h-4 rounded border-[#E2E8F2] text-[#6AAEE5] focus:ring-[#6AAEE5] focus:ring-offset-0 cursor-pointer"
+                      />
+                      <span className="text-[13px] text-[#4a81a4] group-hover:text-[#2d2d60] transition-colors">
+                        Se souvenir de moi
+                      </span>
+                    </label>
                     <button
                       type="button"
                       onClick={() => {
                         resetForm.setValue('email', loginForm.getValues('email'))
                         setView('reset')
                       }}
-                      className="text-[12px] text-[#6AAEE5] hover:text-[#F0F2FF] transition-colors"
+                      className="text-[13px] font-medium text-[#6AAEE5] hover:text-[#2d2d60] transition-colors"
                     >
                       Mot de passe oublié ?
                     </button>
@@ -248,9 +304,10 @@ export default function LoginPage() {
                     type="submit"
                     disabled={loginForm.formState.isSubmitting}
                     className={cn(
-                      'w-full py-3 rounded-xl font-semibold text-[14px] transition-all duration-200',
-                      'bg-gradient-to-r from-[#6AAEE5] to-[#4A7DC4] text-white',
-                      'hover:shadow-lg hover:shadow-[#6AAEE5]/20 hover:brightness-110',
+                      'w-full py-3 rounded-xl font-semibold text-[14px] transition-all duration-300',
+                      'bg-gradient-to-r from-[#2d2d60] to-[#6AAEE5] text-white',
+                      'hover:shadow-lg hover:shadow-[rgba(106,174,229,0.25)] hover:brightness-110',
+                      'active:scale-[0.98]',
                       'disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:brightness-100 disabled:hover:shadow-none'
                     )}
                   >
@@ -278,14 +335,14 @@ export default function LoginPage() {
               >
                 <button
                   onClick={() => setView('login')}
-                  className="flex items-center gap-1.5 text-[12px] text-[#4A5180] hover:text-[#8B95C4] transition-colors mb-5"
+                  className="flex items-center gap-1.5 text-[12px] text-[#6B7280] hover:text-[#2d2d60] transition-colors mb-5"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   Retour à la connexion
                 </button>
 
-                <h2 className="text-xl font-bold text-[#F0F2FF] mb-1">Mot de passe oublié</h2>
-                <p className="text-[13px] text-[#8B95C4] mb-6">
+                <h2 className="text-xl font-bold text-[#2d2d60] mb-1">Mot de passe oublié</h2>
+                <p className="text-[13px] text-[#6B7280] mb-5">
                   Entrez votre email. Nous vous enverrons un lien de réinitialisation.
                 </p>
 
@@ -295,6 +352,7 @@ export default function LoginPage() {
                     icon={Mail}
                     type="email"
                     placeholder="vous@nhboost.com"
+                    autoComplete="email"
                     error={resetForm.formState.errors.email?.message}
                     {...resetForm.register('email')}
                   />
@@ -303,9 +361,10 @@ export default function LoginPage() {
                     type="submit"
                     disabled={resetForm.formState.isSubmitting}
                     className={cn(
-                      'w-full py-3 rounded-xl font-semibold text-[14px] transition-all duration-200',
-                      'bg-gradient-to-r from-[#6AAEE5] to-[#4A7DC4] text-white',
-                      'hover:shadow-lg hover:shadow-[#6AAEE5]/20 hover:brightness-110',
+                      'w-full py-3 rounded-xl font-semibold text-[14px] transition-all duration-300',
+                      'bg-gradient-to-r from-[#2d2d60] to-[#6AAEE5] text-white',
+                      'hover:shadow-lg hover:shadow-[rgba(106,174,229,0.25)] hover:brightness-110',
+                      'active:scale-[0.98]',
                       'disabled:opacity-60 disabled:cursor-not-allowed'
                     )}
                   >
@@ -335,17 +394,17 @@ export default function LoginPage() {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
-                  className="w-14 h-14 rounded-2xl bg-[rgba(34,197,94,0.12)] border border-[rgba(34,197,94,0.25)] flex items-center justify-center mx-auto mb-4"
+                  className="w-14 h-14 rounded-2xl bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)] flex items-center justify-center mx-auto mb-4"
                 >
                   <CheckCircle2 className="w-7 h-7 text-[#22C55E]" />
                 </motion.div>
 
-                <h2 className="text-lg font-bold text-[#F0F2FF] mb-2">Email envoyé !</h2>
-                <p className="text-[13px] text-[#8B95C4] mb-1">
+                <h2 className="text-lg font-bold text-[#2d2d60] mb-2">Email envoyé !</h2>
+                <p className="text-[13px] text-[#6B7280] mb-1">
                   Vérifiez votre boîte mail.
                 </p>
-                <p className="text-[12px] text-[#4A5180] mb-6">
-                  Le lien expire dans <span className="text-[#8B95C4]">15 minutes</span>.
+                <p className="text-[12px] text-[#9CA3AF] mb-6">
+                  Le lien expire dans <span className="text-[#4a81a4] font-medium">15 minutes</span>.
                 </p>
 
                 <button
@@ -353,7 +412,7 @@ export default function LoginPage() {
                     setView('login')
                     resetForm.reset()
                   }}
-                  className="text-[13px] font-medium text-[#6AAEE5] hover:text-[#F0F2FF] transition-colors"
+                  className="text-[13px] font-medium text-[#6AAEE5] hover:text-[#2d2d60] transition-colors"
                 >
                   Retour à la connexion
                 </button>
@@ -364,9 +423,9 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[11px] text-[#4A5180] mt-5">
+        <p className="text-center text-[11px] text-[#9CA3AF] mt-3 sm:mt-5">
           © 2026 NHBoost · Tous droits réservés ·{' '}
-          <Link href="#" className="hover:text-[#8B95C4] transition-colors">Mentions légales</Link>
+          <Link href="#" className="hover:text-[#4a81a4] transition-colors">Mentions légales</Link>
         </p>
       </motion.div>
 

@@ -32,7 +32,7 @@ export default function KPICard({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08, ease: 'easeOut' }}
-      className="relative group rounded-2xl bg-white border border-[#E2E8F2] p-5 overflow-hidden hover:border-[#4a81a4] hover:shadow-[0_4px_16px_rgba(45,45,96,0.1)] transition-all duration-300 shadow-[0_1px_3px_rgba(45,45,96,0.07)]"
+      className="relative group rounded-2xl bg-white border border-[#E2E8F2] p-5 overflow-hidden hover:shadow-[0_4px_16px_rgba(45,45,96,0.1)] transition-all duration-300 shadow-[0_1px_3px_rgba(45,45,96,0.07)]"
     >
       {/* Subtle top accent */}
       <div

@@ -58,6 +58,16 @@ create table if not exists public.orders (
                       check (status in ('pending','in_progress','completed','cancelled')),
   payment_status    text default 'unpaid'
                       check (payment_status in ('paid','unpaid','refunded')),
+  cost              numeric(10,2) default 0,
+  deliverables_url          text,
+  service_type              text default 'standard'
+                              check (service_type in ('website','campaign','standard')),
+  internal_progress_status  text default 'pending'
+                              check (internal_progress_status in (
+                                'pending','in_progress','completed',
+                                'preparation','v1_ready','v2_ready','domain_config','site_done',
+                                'strategy','shooting','launching','live'
+                              )),
   stripe_session_id text,
 
   created_at        timestamptz default now(),
@@ -259,8 +269,17 @@ create policy "Voir ses commandes"
 create policy "Créer une commande"
   on public.orders for insert with check (auth.uid() = user_id);
 
+-- Le franchisé peut modifier uniquement les infos client/brief (pas les champs internes)
 create policy "Modifier sa commande"
-  on public.orders for update using (auth.uid() = user_id);
+  on public.orders for update using (auth.uid() = user_id)
+  with check (
+    -- Interdit de changer les champs réservés à l'admin
+    -- (La vérification se fait côté application car RLS ne peut pas bloquer des colonnes)
+    auth.uid() = user_id
+  );
+
+-- Policy admin (service_role) pour mettre à jour status, avancement, livrables
+-- Note : le service_role bypass le RLS par défaut dans Supabase
 
 -- ─── Support tickets ──────────────────────────────────────────
 drop policy if exists "Voir ses tickets" on public.support_tickets;
@@ -304,3 +323,204 @@ create index if not exists idx_notifications_user_id
 
 create index if not exists idx_notifications_read
   on public.notifications (user_id, read) where read = false;
+
+
+-- ============================================================
+-- DEVIS & FACTURES (Secrétaire IA)
+-- ============================================================
+
+-- ─── Devis ────────────────────────────────────────────────────
+create table if not exists public.devis (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid references auth.users(id) on delete cascade not null,
+  ref             text unique,
+  client_name     text not null,
+  client_email    text,
+  client_phone    text,
+  company_name    text,
+  company_email   text,
+  vat_number      text,
+  client_address  text,
+  subtotal_ht     numeric(10,2) default 0,
+  tva_rate        numeric(5,2) default 21.00,
+  tva_amount      numeric(10,2) default 0,
+  total_ttc       numeric(10,2) default 0,
+  discount        numeric(10,2) default 0,
+  status          text default 'draft'
+                    check (status in ('draft','sent','accepted','rejected','expired','invoiced')),
+  valid_until     date,
+  notes           text,
+  facture_id      uuid,
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+
+-- ─── Devis items ──────────────────────────────────────────────
+create table if not exists public.devis_items (
+  id          uuid primary key default gen_random_uuid(),
+  devis_id    uuid references public.devis(id) on delete cascade not null,
+  service_id  text,
+  description text not null,
+  quantity    integer default 1,
+  unit_price  numeric(10,2) not null,
+  total       numeric(10,2) not null,
+  sort_order  integer default 0,
+  created_at  timestamptz default now()
+);
+
+-- ─── Factures ─────────────────────────────────────────────────
+create table if not exists public.factures (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid references auth.users(id) on delete cascade not null,
+  ref             text unique,
+  devis_id        uuid references public.devis(id) on delete set null,
+  client_name     text not null,
+  client_email    text,
+  client_phone    text,
+  company_name    text,
+  company_email   text,
+  vat_number      text,
+  client_address  text,
+  subtotal_ht     numeric(10,2) default 0,
+  tva_rate        numeric(5,2) default 21.00,
+  tva_amount      numeric(10,2) default 0,
+  total_ttc       numeric(10,2) default 0,
+  discount        numeric(10,2) default 0,
+  status          text default 'unpaid'
+                    check (status in ('unpaid','paid','overdue','cancelled')),
+  payment_method  text,
+  paid_at         timestamptz,
+  due_date        date,
+  notes           text,
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+
+-- FK devis → facture
+alter table public.devis
+  add constraint devis_facture_fk foreign key (facture_id)
+  references public.factures(id) on delete set null;
+
+-- ─── Facture items ────────────────────────────────────────────
+create table if not exists public.facture_items (
+  id           uuid primary key default gen_random_uuid(),
+  facture_id   uuid references public.factures(id) on delete cascade not null,
+  service_id   text,
+  description  text not null,
+  quantity     integer default 1,
+  unit_price   numeric(10,2) not null,
+  total        numeric(10,2) not null,
+  sort_order   integer default 0,
+  created_at   timestamptz default now()
+);
+
+-- ─── Chat sessions ────────────────────────────────────────────
+create table if not exists public.chat_sessions (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references auth.users(id) on delete cascade not null,
+  title       text default 'Nouvelle conversation',
+  devis_id    uuid references public.devis(id) on delete set null,
+  facture_id  uuid references public.factures(id) on delete set null,
+  messages    jsonb default '[]'::jsonb,
+  created_at  timestamptz default now(),
+  updated_at  timestamptz default now()
+);
+
+-- ─── Auto-ref devis (DEV-YYYY-XXXX) ──────────────────────────
+create or replace function public.set_devis_ref()
+returns trigger language plpgsql as $$
+begin
+  if new.ref is null then
+    new.ref := 'DEV-' || to_char(now(), 'YYYY') || '-'
+      || lpad(
+           ((select count(*) from public.devis where ref like 'DEV-' || to_char(now(),'YYYY') || '-%') + 1)::text,
+           4, '0'
+         );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists devis_ref_trigger on public.devis;
+create trigger devis_ref_trigger
+  before insert on public.devis
+  for each row execute function public.set_devis_ref();
+
+-- ─── Auto-ref factures (FAC-YYYY-XXXX) ───────────────────────
+create or replace function public.set_facture_ref()
+returns trigger language plpgsql as $$
+begin
+  if new.ref is null then
+    new.ref := 'FAC-' || to_char(now(), 'YYYY') || '-'
+      || lpad(
+           ((select count(*) from public.factures where ref like 'FAC-' || to_char(now(),'YYYY') || '-%') + 1)::text,
+           4, '0'
+         );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists facture_ref_trigger on public.factures;
+create trigger facture_ref_trigger
+  before insert on public.factures
+  for each row execute function public.set_facture_ref();
+
+-- ─── updated_at triggers ──────────────────────────────────────
+drop trigger if exists devis_updated_at       on public.devis;
+drop trigger if exists factures_updated_at    on public.factures;
+drop trigger if exists chat_sessions_updated_at on public.chat_sessions;
+
+create trigger devis_updated_at
+  before update on public.devis
+  for each row execute function public.set_updated_at();
+
+create trigger factures_updated_at
+  before update on public.factures
+  for each row execute function public.set_updated_at();
+
+create trigger chat_sessions_updated_at
+  before update on public.chat_sessions
+  for each row execute function public.set_updated_at();
+
+-- ─── RLS ──────────────────────────────────────────────────────
+alter table public.devis          enable row level security;
+alter table public.devis_items    enable row level security;
+alter table public.factures       enable row level security;
+alter table public.facture_items  enable row level security;
+alter table public.chat_sessions  enable row level security;
+
+-- Devis
+create policy "Voir ses devis"    on public.devis for select using (auth.uid() = user_id);
+create policy "Créer un devis"    on public.devis for insert with check (auth.uid() = user_id);
+create policy "Modifier son devis" on public.devis for update using (auth.uid() = user_id);
+
+-- Devis items (via parent)
+create policy "Voir items devis"  on public.devis_items for select
+  using (devis_id in (select id from public.devis where user_id = auth.uid()));
+create policy "Créer items devis" on public.devis_items for insert
+  with check (devis_id in (select id from public.devis where user_id = auth.uid()));
+
+-- Factures
+create policy "Voir ses factures"    on public.factures for select using (auth.uid() = user_id);
+create policy "Créer une facture"    on public.factures for insert with check (auth.uid() = user_id);
+create policy "Modifier sa facture"  on public.factures for update using (auth.uid() = user_id);
+
+-- Facture items (via parent)
+create policy "Voir items facture"  on public.facture_items for select
+  using (facture_id in (select id from public.factures where user_id = auth.uid()));
+create policy "Créer items facture" on public.facture_items for insert
+  with check (facture_id in (select id from public.factures where user_id = auth.uid()));
+
+-- Chat sessions
+create policy "Voir ses sessions"    on public.chat_sessions for select using (auth.uid() = user_id);
+create policy "Créer une session"    on public.chat_sessions for insert with check (auth.uid() = user_id);
+create policy "Modifier sa session"  on public.chat_sessions for update using (auth.uid() = user_id);
+create policy "Supprimer sa session" on public.chat_sessions for delete using (auth.uid() = user_id);
+
+-- ─── Indexes ──────────────────────────────────────────────────
+create index if not exists idx_devis_user_id on public.devis (user_id);
+create index if not exists idx_devis_status on public.devis (status);
+create index if not exists idx_factures_user_id on public.factures (user_id);
+create index if not exists idx_factures_status on public.factures (status);
+create index if not exists idx_chat_sessions_user_id on public.chat_sessions (user_id);
