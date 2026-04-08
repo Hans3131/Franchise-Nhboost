@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
 
     const pdf = await generatePdf(facture, items ?? [])
 
-    return new Response(pdf, {
+    return new Response(new Uint8Array(pdf), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${facture.ref}.pdf"`,

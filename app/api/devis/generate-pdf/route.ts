@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
 
     const pdf = await generatePdf(devis, items ?? [])
 
-    return new Response(pdf, {
+    return new Response(new Uint8Array(pdf), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${devis.ref}.pdf"`,
