@@ -308,34 +308,41 @@ export default function CommanderPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        await supabase.from('orders').insert({
-          user_id:         user.id,
-          service:         order.service,
-          client_name:     order.client_name,
-          client_email:    order.client_email,
-          client_phone:    order.client_phone    ?? null,
-          company_name:    order.company_name    ?? null,
-          company_email:   order.company_email   ?? null,
-          sector:          order.sector          ?? null,
-          vat_number:      order.vat_number      ?? null,
-          website:         order.website         ?? null,
-          instagram:       order.instagram       ?? null,
-          facebook:        order.facebook        ?? null,
-          tiktok:          order.tiktok          ?? null,
-          brief:           order.brief           ?? null,
-          objectives:      order.objectives      ?? null,
-          required_access: order.required_access ?? null,
-          price:           order.price,
-          status:          'pending',
-          payment_status:  'unpaid',
-          cost:            0,
-          whatsapp_group:  data.whatsappGroup    ?? null,
-          domain_name:     data.domainName       ?? null,
-          specific_request: data.specificRequest ?? null,
+        const { error: sbError } = await supabase.from('orders').insert({
+          user_id:            user.id,
+          service:            order.service,
+          client_name:        order.client_name,
+          client_email:       order.client_email,
+          client_phone:       order.client_phone    ?? null,
+          company_name:       order.company_name    ?? null,
+          company_email:      order.company_email   ?? null,
+          sector:             order.sector          ?? null,
+          vat_number:         order.vat_number      ?? null,
+          website:            order.website         ?? null,
+          instagram:          order.instagram       ?? null,
+          facebook:           order.facebook        ?? null,
+          tiktok:             order.tiktok          ?? null,
+          brief:              order.brief           ?? null,
+          objectives:         order.objectives      ?? null,
+          required_access:    order.required_access ?? null,
+          price:              order.price,
+          cost:               order.cost            ?? 0,
+          sale_price:         order.sale_price      ?? order.price,
+          internal_cost:      order.internal_cost   ?? order.cost ?? 0,
+          profit:             order.profit          ?? 0,
+          monthly_price:      order.monthly_price   ?? null,
+          commitment_months:  order.commitment_months ?? null,
+          contract_total:     order.contract_total  ?? null,
+          status:             'pending',
+          payment_status:     'unpaid',
+          whatsapp_group:     data.whatsappGroup    ?? null,
+          domain_name:        data.domainName       ?? null,
+          specific_request:   data.specificRequest  ?? null,
         })
+        if (sbError) console.error('Supabase insert error:', sbError.message)
       }
     } catch (e) {
-      console.warn('Supabase order insert failed:', e)
+      console.error('Supabase order insert failed:', e)
     }
 
     // ── Notification locale ────────────────────────────────

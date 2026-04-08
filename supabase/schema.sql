@@ -65,6 +65,9 @@ create table if not exists public.orders (
   monthly_price     numeric(10,2),
   commitment_months integer,
   contract_total    numeric(10,2),
+  whatsapp_group    text,
+  domain_name       text,
+  specific_request  text,
   deliverables_url          text,
   service_type              text default 'standard'
                               check (service_type in ('website','campaign','standard')),
