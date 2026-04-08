@@ -21,7 +21,11 @@ type PaymentMode = 'one-shot' | 'subscription'
 
 interface Service {
   id: string; name: string; description: string
-  price: number; type: PaymentMode
+  internalCost: number       // coût interne NHBoost
+  salePrice: number          // prix de vente franchisé
+  type: PaymentMode
+  monthlyPrice?: number      // prix mensuel si abonnement
+  commitmentMonths?: number  // durée engagement minimum
   icon: React.ElementType; iconColor: string; popular?: boolean
   engagement?: string
 }
@@ -59,11 +63,11 @@ interface FormData {
 
 // ─── Constants ────────────────────────────────────────────────
 const SERVICES: Service[] = [
-  { id: 'site-onepage', name: 'Site One Page', description: 'Page unique optimisée, design professionnel responsive, formulaire de contact, mise en ligne, SEO Friendly', price: 300, type: 'one-shot', icon: Globe, iconColor: '#6AAEE5' },
-  { id: 'site-complet', name: 'Site Complet', description: 'Site multipages, design personnalisé, optimisation SEO de base, intégration WhatsApp/formulaire, responsive mobile', price: 800, type: 'one-shot', icon: Globe, iconColor: '#4A7DC4', popular: true },
-  { id: 'visibilite', name: 'Offre Visibilité', description: 'Création de contenus, gestion de visibilité digitale, vidéos réseaux sociaux, optimisation présence locale', price: 390, type: 'subscription', icon: Share2, iconColor: '#F59E0B', engagement: '6 mois' },
-  { id: 'acquisition', name: "Système d'Acquisition Simple", description: 'Tunnel simple, page de conversion, système de collecte de leads, structuration de l\'offre', price: 490, type: 'one-shot', icon: Target, iconColor: '#22C55E' },
-  { id: 'accompagnement', name: 'Accompagnement Business Premium', description: 'Positionnement stratégique, structuration offre, création contenu, système acquisition, optimisation commerciale', price: 2500, type: 'one-shot', icon: Briefcase, iconColor: '#8B5CF6' },
+  { id: 'site-onepage', name: 'Site One Page', description: 'Page unique optimisée, design professionnel responsive, formulaire de contact, mise en ligne, SEO Friendly', internalCost: 300, salePrice: 970, type: 'one-shot', icon: Globe, iconColor: '#6AAEE5' },
+  { id: 'site-complet', name: 'Site Complet', description: 'Site multipages, design personnalisé, optimisation SEO de base, intégration WhatsApp/formulaire, responsive mobile', internalCost: 800, salePrice: 1470, type: 'one-shot', icon: Globe, iconColor: '#4A7DC4', popular: true },
+  { id: 'visibilite', name: 'Offre Visibilité', description: 'Création de contenus, gestion de visibilité digitale, vidéos réseaux sociaux, optimisation présence locale', internalCost: 390, salePrice: 870, type: 'subscription', monthlyPrice: 870, commitmentMonths: 6, icon: Share2, iconColor: '#F59E0B', engagement: '6 mois' },
+  { id: 'acquisition', name: "Système d'Acquisition Simple", description: 'Tunnel simple, page de conversion, système de collecte de leads, structuration de l\'offre', internalCost: 490, salePrice: 970, type: 'subscription', monthlyPrice: 970, commitmentMonths: 3, icon: Target, iconColor: '#22C55E', engagement: '3 mois' },
+  { id: 'accompagnement', name: 'Accompagnement Business Premium', description: 'Positionnement stratégique, structuration offre, création contenu, système acquisition, optimisation commerciale', internalCost: 2500, salePrice: 4970, type: 'one-shot', icon: Briefcase, iconColor: '#8B5CF6' },
 ]
 
 const STEPS = [
@@ -223,10 +227,18 @@ export default function CommanderPage() {
       brief:           data.brief,
       objectives:      data.objectives,
       required_access: data.requiredAccess,
-      price:           selectedService?.price ?? 0,
-      status:          'pending',
-      payment_status:  'unpaid',
-      cost:            0,
+      price:              selectedService?.salePrice ?? 0,
+      cost:               selectedService?.internalCost ?? 0,
+      sale_price:         selectedService?.salePrice ?? 0,
+      internal_cost:      selectedService?.internalCost ?? 0,
+      profit:             (selectedService?.salePrice ?? 0) - (selectedService?.internalCost ?? 0),
+      monthly_price:      selectedService?.monthlyPrice ?? undefined,
+      commitment_months:  selectedService?.commitmentMonths ?? undefined,
+      contract_total:     selectedService?.commitmentMonths
+        ? (selectedService.salePrice) * selectedService.commitmentMonths
+        : undefined,
+      status:             'pending',
+      payment_status:     'unpaid',
       whatsapp_group:  data.whatsappGroup || undefined,
       domain_name:     data.domainName || undefined,
       specific_request: data.specificRequest || undefined,
@@ -615,7 +627,7 @@ export default function CommanderPage() {
                                 {svc.name}
                               </p>
                               <p className="text-[14px] font-bold" style={{ color: svc.iconColor }}>
-                                {formatPrice(svc.price)}{svc.type === 'subscription' ? '/mois' : ''}
+                                {formatPrice(svc.salePrice)}{svc.type === 'subscription' ? '/mois' : ''}
                               </p>
                             </div>
                             <p className="text-[11px] text-[#6B7280] leading-relaxed">{svc.description}</p>
@@ -964,12 +976,12 @@ Accès hébergement / CMS : .....`}
                       onSelect={() => setData(d => ({ ...d, paymentMode: 'one-shot' }))}
                       icon={Zap} title="Paiement unique"
                       description="Réglez la totalité en une fois. Accès immédiat dès confirmation."
-                      price={formatPrice(selectedService.price)} badge="Ponctuel" badgeColor="#6AAEE5" />
+                      price={formatPrice(selectedService.salePrice)} badge="Ponctuel" badgeColor="#6AAEE5" />
                     <PaymentCard mode="subscription" selected={data.paymentMode === 'subscription'}
                       onSelect={() => setData(d => ({ ...d, paymentMode: 'subscription' }))}
                       icon={CreditCard} title="Abonnement mensuel"
                       description="Étalez le paiement mois par mois. Résiliable à tout moment."
-                      price={`${formatPrice(Math.ceil(selectedService.price / 3))}/mois`}
+                      price={selectedService.monthlyPrice ? `${formatPrice(selectedService.monthlyPrice)}/mois` : `${formatPrice(Math.ceil(selectedService.salePrice / 3))}/mois`}
                       badge="Récurrent" badgeColor="#22C55E" />
                   </div>
                 )}
@@ -1025,8 +1037,8 @@ Accès hébergement / CMS : .....`}
                   <SummaryRow label="Paiement" value={data.paymentMode === 'subscription' ? 'Abonnement mensuel' : 'Paiement unique'} />
                   <SummaryRow label="Montant"
                     value={data.paymentMode === 'subscription'
-                      ? `${formatPrice(Math.ceil((selectedService?.price ?? 0) / 3))}/mois`
-                      : formatPrice(selectedService?.price)}
+                      ? (selectedService?.monthlyPrice ? `${formatPrice(selectedService.monthlyPrice)}/mois` : `${formatPrice(Math.ceil((selectedService?.salePrice ?? 0) / 3))}/mois`)
+                      : formatPrice(selectedService?.salePrice)}
                     highlight />
 
                   {/* Brief */}

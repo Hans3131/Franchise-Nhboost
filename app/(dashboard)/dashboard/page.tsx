@@ -18,7 +18,9 @@ type Period = 'month' | 'year' | 'all'
 
 interface OrderRow {
   ref: string; service: string; client_name: string
-  price: number; cost: number; status: string; created_at: string
+  price: number; cost: number
+  sale_price: number; internal_cost: number; profit: number
+  status: string; created_at: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -45,7 +47,7 @@ function getMonthlyData(orders: OrderRow[]) {
     const revenue = orders
       .filter(o => o.status === 'completed')
       .filter(o => { const od = new Date(o.created_at); return od.getMonth() === m && od.getFullYear() === y })
-      .reduce((s, o) => s + o.price, 0)
+      .reduce((s, o) => s + o.sale_price, 0)
     months.push({ key: `${y}-${m}`, label: label.charAt(0).toUpperCase() + label.slice(1), revenue })
   }
   // Current month
@@ -131,7 +133,10 @@ export default function DashboardPage() {
     const localOrders = getAll()
     setOrders(localOrders.map(o => ({
       ref: o.ref, service: o.service, client_name: o.client_name,
-      price: o.price, cost: o.cost ?? 0, status: o.status, created_at: o.created_at,
+      price: o.price, cost: o.cost ?? 0,
+        sale_price: o.sale_price ?? o.price, internal_cost: o.internal_cost ?? o.cost,
+        profit: o.profit ?? (o.price - (o.cost > 0 ? o.cost : Math.round(o.price * 0.64))),
+        status: o.status, created_at: o.created_at,
     })))
     setLoading(false)
 
@@ -155,6 +160,9 @@ export default function DashboardPage() {
             setOrders(rows.map(r => ({
               ref: r.ref ?? r.id, service: r.service, client_name: r.client_name ?? '',
               price: Number(r.price ?? 0), cost: Number(r.cost ?? 0),
+              sale_price: Number(r.sale_price ?? r.price ?? 0),
+              internal_cost: Number(r.internal_cost ?? r.cost ?? 0),
+              profit: Number(r.profit ?? 0),
               status: r.status ?? 'pending', created_at: r.created_at ?? new Date().toISOString(),
             })))
           }
@@ -165,8 +173,11 @@ export default function DashboardPage() {
   // ─── Computed KPIs ─────────────────────────────────────────
   const filtered  = useMemo(() => filterByPeriod(orders, period), [orders, period])
   const completed = useMemo(() => filtered.filter(o => o.status === 'completed'), [filtered])
-  const revenue   = useMemo(() => completed.reduce((s, o) => s + o.price, 0), [completed])
-  const costs     = useMemo(() => completed.reduce((s, o) => s + (o.cost > 0 ? o.cost : Math.round(o.price * 0.64)), 0), [completed])
+  // CA = somme des prix de vente franchisé
+  const revenue   = useMemo(() => completed.reduce((s, o) => s + o.sale_price, 0), [completed])
+  // Coûts = somme des coûts internes NHBoost
+  const costs     = useMemo(() => completed.reduce((s, o) => s + o.internal_cost, 0), [completed])
+  // Bénéfice = CA - Coûts
   const profit    = revenue - costs
 
   // ─── Chart data ────────────────────────────────────────────

@@ -59,6 +59,12 @@ create table if not exists public.orders (
   payment_status    text default 'unpaid'
                       check (payment_status in ('paid','unpaid','refunded')),
   cost              numeric(10,2) default 0,
+  sale_price        numeric(10,2) default 0,
+  internal_cost     numeric(10,2) default 0,
+  profit            numeric(10,2) default 0,
+  monthly_price     numeric(10,2),
+  commitment_months integer,
+  contract_total    numeric(10,2),
   deliverables_url          text,
   service_type              text default 'standard'
                               check (service_type in ('website','campaign','standard')),

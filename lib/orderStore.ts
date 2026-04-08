@@ -28,8 +28,14 @@ export interface LocalOrder {
   domain_name?:     string
   specific_request?: string
   // Finance
-  price:           number
-  cost:            number
+  price:              number   // = sale_price (prix de vente franchisé)
+  cost:               number   // = internal_cost (coût interne NHBoost)
+  sale_price?:        number
+  internal_cost?:     number
+  profit?:            number   // sale_price - internal_cost
+  monthly_price?:     number
+  commitment_months?: number
+  contract_total?:    number
   status:          'pending' | 'in_progress' | 'completed' | 'cancelled'
   payment_status:  'unpaid' | 'paid' | 'refunded'
   // Dates
