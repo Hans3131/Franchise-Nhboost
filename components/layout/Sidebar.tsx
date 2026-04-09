@@ -16,6 +16,7 @@ import {
   Users,
   Kanban,
   Inbox,
+  ShoppingBag,
   X,
   ChevronRight,
   Settings,
@@ -25,6 +26,7 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { href: '/dashboard',  label: 'Tableau de bord', icon: LayoutDashboard },
+  { href: '/catalogue',  label: 'Catalogue',        icon: ShoppingBag },
   { href: '/commander',  label: 'Commander',        icon: ShoppingCart },
   { href: '/secretaire', label: 'Secrétaire IA',    icon: Bot },
   { href: '/crm',        label: 'Mes clients',      icon: Users },
