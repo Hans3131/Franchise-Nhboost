@@ -15,6 +15,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const router = useRouter()
 
+  // Login page: render without sidebar
+  if (pathname === '/admin/login') {
+    return <>{children}</>
+  }
+
   const handleLogout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()

@@ -50,14 +50,18 @@ export async function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some(p => pathname.startsWith(p))
   const isAdmin = pathname.startsWith('/admin')
 
-  if (!user && (isProtected || isAdmin)) {
+  if (!user && isProtected) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirectTo', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // Protège les routes admin — vérifie le role
-  if (user && isAdmin) {
+  // Admin : redirige vers /admin/login si pas connecté (sauf la page login elle-même)
+  if (isAdmin && pathname !== '/admin/login') {
+    if (!user) {
+      return NextResponse.redirect(new URL('/admin/login', request.url))
+    }
+    // Vérifie le rôle admin
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -65,7 +69,9 @@ export async function proxy(request: NextRequest) {
       .single()
     const role = profile?.role ?? 'franchisee'
     if (role !== 'admin' && role !== 'super_admin') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      const url = new URL('/admin/login', request.url)
+      url.searchParams.set('denied', '1')
+      return NextResponse.redirect(url)
     }
   }
 
