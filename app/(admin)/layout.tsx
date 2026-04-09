@@ -3,12 +3,14 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Bell, Settings, LogOut, Shield } from 'lucide-react'
+import { LayoutDashboard, Users, Bell, Settings, LogOut, Shield, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 const ADMIN_NAV = [
-  { href: '/admin/dashboard', label: 'Vue réseau', icon: LayoutDashboard },
+  { href: '/admin/dashboard', label: 'Vue reseau', icon: LayoutDashboard },
+  { href: '/admin/commandes', label: 'Commandes', icon: ClipboardList },
+  { href: '/admin/franchisees', label: 'Franchises', icon: Users },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -54,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/dashboard"
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#8B95C4] hover:text-[#F0F2FF] hover:bg-[rgba(107,174,229,0.06)] transition-all">
               <Shield className="w-[18px] h-[18px] text-[#4A5180]" strokeWidth={1.75} />
-              <span>Portail franchisé</span>
+              <span>Portail franchise</span>
             </Link>
           </div>
         </nav>
@@ -63,7 +65,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#8B95C4] hover:text-[#EF4444] hover:bg-[rgba(239,68,68,0.06)] transition-all w-full">
             <LogOut className="w-[18px] h-[18px]" strokeWidth={1.75} />
-            <span>Déconnexion</span>
+            <span>Deconnexion</span>
           </button>
         </div>
       </aside>

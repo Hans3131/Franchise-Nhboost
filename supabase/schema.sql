@@ -20,6 +20,11 @@ create table if not exists public.profiles (
   phone          text,
   address        text,
   role           text default 'franchisee' check (role in ('franchisee','admin','super_admin')),
+  first_name     text,
+  last_name      text,
+  sector         text,
+  account_status text default 'active' check (account_status in ('active','pending','suspended')),
+  franchise_key  text unique,
   created_at     timestamptz default now(),
   updated_at     timestamptz default now()
 );
