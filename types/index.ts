@@ -215,3 +215,24 @@ export interface PipelineHistoryEntry {
   note?: string
   created_at: string
 }
+
+// ─── Leads entrants ──────────────────────────────────────────
+
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'converted' | 'lost'
+
+export interface Lead {
+  id: string
+  user_id: string
+  source: string
+  source_detail?: string
+  name: string
+  email?: string
+  phone?: string
+  company?: string
+  message?: string
+  status: LeadStatus
+  client_id?: string
+  metadata?: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}

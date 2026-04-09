@@ -635,3 +635,37 @@ create policy "Creer historique pipeline" on public.pipeline_history for insert
 
 create index if not exists idx_pipeline_history_client on public.pipeline_history (client_id);
 create index if not exists idx_clients_pipeline_stage on public.clients (pipeline_stage);
+
+
+-- ============================================================
+-- LEADS ENTRANTS
+-- ============================================================
+
+create table if not exists public.leads (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid references auth.users(id) on delete cascade not null,
+  source        text default 'form',
+  source_detail text,
+  name          text not null,
+  email         text,
+  phone         text,
+  company       text,
+  message       text,
+  status        text default 'new'
+                  check (status in ('new','contacted','qualified','converted','lost')),
+  client_id     uuid references public.clients(id) on delete set null,
+  metadata      jsonb default '{}'::jsonb,
+  created_at    timestamptz default now(),
+  updated_at    timestamptz default now()
+);
+
+alter table public.leads enable row level security;
+create policy "Voir ses leads" on public.leads for select using (auth.uid() = user_id);
+create policy "Modifier ses leads" on public.leads for update using (auth.uid() = user_id);
+
+drop trigger if exists leads_updated_at on public.leads;
+create trigger leads_updated_at before update on public.leads
+  for each row execute function public.set_updated_at();
+
+create index if not exists idx_leads_user_id on public.leads (user_id);
+create index if not exists idx_leads_status on public.leads (status);
