@@ -136,6 +136,17 @@ export default function AdminCommandesPage() {
     completed: orders.filter(o => o.status === 'completed').length,
   }), [orders])
 
+  // Group by franchise
+  const groupedByFranchise = useMemo(() => {
+    const map: Record<string, { name: string; code: string; orders: typeof filtered }> = {}
+    filtered.forEach(o => {
+      const key = o.franchise_name || 'Inconnu'
+      if (!map[key]) map[key] = { name: key, code: o.franchise_code || '', orders: [] }
+      map[key].orders.push(o)
+    })
+    return Object.values(map).sort((a, b) => b.orders.length - a.orders.length)
+  }, [filtered])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -219,42 +230,52 @@ export default function AdminCommandesPage() {
         </div>
       </motion.div>
 
-      {/* Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-2xl border border-[#E2E8F2] shadow-sm overflow-hidden"
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#E2E8F2] bg-[#F5F7FA]">
-                <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">Ref</th>
-                <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">Service</th>
-                <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">Client</th>
-                <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">Franchise</th>
-                <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">Statut</th>
-                <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">Avancement</th>
-                <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-[#6B7280]">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              <AnimatePresence mode="popLayout">
-                {filtered.length === 0 ? (
-                  <motion.tr
-                    key="empty"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <td colSpan={7} className="px-4 py-12 text-center text-[#9CA3AF]">
-                      <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                      Aucune commande trouvee.
-                    </td>
-                  </motion.tr>
-                ) : (
-                  filtered.map((order, i) => {
+      {/* Grouped by franchise */}
+      {filtered.length === 0 ? (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white rounded-2xl border border-[#E2E8F2] shadow-sm p-12 text-center">
+          <Package className="w-8 h-8 mx-auto mb-2 text-[#9CA3AF] opacity-40" />
+          <p className="text-[#9CA3AF]">Aucune commande trouvee.</p>
+        </motion.div>
+      ) : (
+        <div className="space-y-6">
+          {groupedByFranchise.map((group, gIdx) => (
+            <motion.div
+              key={group.name}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + gIdx * 0.05 }}
+              className="bg-white rounded-2xl border border-[#E2E8F2] shadow-sm overflow-hidden"
+            >
+              {/* Franchise header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-[#F0F3F8] bg-[#F8FAFC]">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[#2d2d60]/10 flex items-center justify-center">
+                    <Package className="w-4 h-4 text-[#2d2d60]" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-[#2d2d60]">{group.name}</p>
+                    {group.code && <p className="text-[10px] font-mono text-[#9CA3AF]">{group.code}</p>}
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#2d2d60]/10 text-[#2d2d60]">
+                  {group.orders.length} commande{group.orders.length > 1 ? 's' : ''}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#E2E8F2]">
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Ref</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Service</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Client</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Statut</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Avancement</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.orders.map((order, i) => {
                     const st = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
                     const progress = order.internal_progress_status ?? order.status
                     return (
@@ -282,12 +303,6 @@ export default function AdminCommandesPage() {
                         <td className="px-4 py-3">
                           <div className="text-xs font-medium text-[#374151]">{order.client_name ?? '---'}</div>
                           <div className="text-[10px] text-[#9CA3AF]">{order.client_email ?? ''}</div>
-                        </td>
-
-                        {/* Franchise */}
-                        <td className="px-4 py-3">
-                          <div className="text-xs font-medium text-[#374151]">{order.franchise_name}</div>
-                          <div className="text-[10px] text-[#9CA3AF]">{order.franchise_code}</div>
                         </td>
 
                         {/* Status badge */}
@@ -332,13 +347,14 @@ export default function AdminCommandesPage() {
                         </td>
                       </motion.tr>
                     )
-                  })
-                )}
-              </AnimatePresence>
-            </tbody>
-          </table>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          ))}
         </div>
-      </motion.div>
+      )}
     </div>
   )
 }

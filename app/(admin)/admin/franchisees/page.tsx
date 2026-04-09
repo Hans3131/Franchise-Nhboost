@@ -52,6 +52,7 @@ export default function AdminFranchiseesPage() {
     first_name: '',
     last_name: '',
     email: '',
+    password: '',
     phone: '',
     address: '',
     sector: '',
@@ -133,7 +134,7 @@ export default function AdminFranchiseesPage() {
       loadFranchisees()
 
       // Reset form
-      setForm({ first_name: '', last_name: '', email: '', phone: '', address: '', sector: '', franchise_code: '', account_status: 'active' })
+      setForm({ first_name: '', last_name: '', email: '', password: '', phone: '', address: '', sector: '', franchise_code: '', account_status: 'active' })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur de creation')
     } finally {
@@ -447,15 +448,27 @@ export default function AdminFranchiseesPage() {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">Email *</label>
-                      <input
-                        type="email"
-                        value={form.email}
-                        onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-xl border border-[#E2E8F2] text-sm text-[#2d2d60] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#2d2d60]/20 focus:border-[#2d2d60] transition-all"
-                        placeholder="jean@example.com"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">Email *</label>
+                        <input
+                          type="email"
+                          value={form.email}
+                          onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl border border-[#E2E8F2] text-sm text-[#2d2d60] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#2d2d60]/20 focus:border-[#2d2d60] transition-all"
+                          placeholder="jean@example.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">Mot de passe</label>
+                        <input
+                          type="text"
+                          value={form.password}
+                          onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl border border-[#E2E8F2] text-sm text-[#2d2d60] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#2d2d60]/20 focus:border-[#2d2d60] transition-all"
+                          placeholder="Auto-généré si vide"
+                        />
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">

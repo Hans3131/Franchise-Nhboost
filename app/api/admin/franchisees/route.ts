@@ -31,9 +31,8 @@ export async function GET() {
       return NextResponse.json({ error: profilesErr.message }, { status: 500 })
     }
 
-    // Filter franchisees (exclude admins)
+    // Include all users (franchisees + admins shown with role)
     const franchisees = (profiles ?? [])
-      .filter(p => p.role === 'franchisee' || !p.role)
 
     // Fetch auth users to get emails
     const { data: authData } = await svc.auth.admin.listUsers({ perPage: 1000 })
@@ -50,6 +49,7 @@ export async function GET() {
       phone: p.phone ?? null,
       franchise_code: p.franchise_code ?? '',
       account_status: p.account_status ?? 'active',
+      role: p.role ?? 'franchisee',
       created_at: p.created_at,
     }))
 
