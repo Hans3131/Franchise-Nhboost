@@ -78,10 +78,31 @@ create table if not exists public.orders (
                                 'strategy','shooting','launching','live'
                               )),
   stripe_session_id text,
+  public_token      text unique,
+  public_tracking_enabled boolean default false,
 
   created_at        timestamptz default now(),
   updated_at        timestamptz default now()
 );
+
+-- ─── Messages par commande ────────────────────────────────────
+create table if not exists public.order_messages (
+  id          uuid primary key default gen_random_uuid(),
+  order_id    uuid references public.orders(id) on delete cascade not null,
+  user_id     uuid references auth.users(id) on delete cascade not null,
+  sender_role text default 'franchisee'
+                check (sender_role in ('franchisee','admin')),
+  content     text not null,
+  read        boolean default false,
+  created_at  timestamptz default now()
+);
+
+alter table public.order_messages enable row level security;
+create policy "Voir messages commande" on public.order_messages for select
+  using (order_id in (select id from public.orders where user_id = auth.uid()));
+create policy "Envoyer message" on public.order_messages for insert
+  with check (order_id in (select id from public.orders where user_id = auth.uid()));
+create index if not exists idx_order_messages_order_id on public.order_messages (order_id);
 
 -- ─── Tickets support ──────────────────────────────────────────
 create table if not exists public.support_tickets (

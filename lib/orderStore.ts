@@ -27,6 +27,8 @@ export interface LocalOrder {
   whatsapp_group?:  string
   domain_name?:     string
   specific_request?: string
+  // Suivi
+  public_token?:      string
   // Finance
   price:              number   // = sale_price (prix de vente franchisé)
   cost:               number   // = internal_cost (coût interne NHBoost)
@@ -65,10 +67,11 @@ export function insert(order: Omit<LocalOrder, 'id' | 'ref' | 'created_at' | 'up
   const now = new Date().toISOString()
   const newOrder: LocalOrder = {
     ...order,
-    id:         crypto.randomUUID(),
-    ref:        genRef(),
-    created_at: now,
-    updated_at: now,
+    id:           crypto.randomUUID(),
+    ref:          genRef(),
+    public_token: crypto.randomUUID(),
+    created_at:   now,
+    updated_at:   now,
   }
   const all = getAll()
   all.unshift(newOrder)

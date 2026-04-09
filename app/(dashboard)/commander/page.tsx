@@ -338,6 +338,8 @@ export default function CommanderPage() {
           whatsapp_group:     data.whatsappGroup    ?? null,
           domain_name:        data.domainName       ?? null,
           specific_request:   data.specificRequest  ?? null,
+          public_token:       order.public_token    ?? crypto.randomUUID(),
+          public_tracking_enabled: true,
         })
         if (sbError) console.error('Supabase insert error:', sbError.message)
       }
