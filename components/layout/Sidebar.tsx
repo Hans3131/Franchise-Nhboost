@@ -17,6 +17,8 @@ import {
   Kanban,
   Inbox,
   ShoppingBag,
+  BarChart3,
+  GraduationCap,
   X,
   ChevronRight,
   Settings,
@@ -34,6 +36,8 @@ const NAV_ITEMS = [
   { href: '/mes-leads',  label: 'Mes leads',        icon: Inbox },
   { href: '/commandes',  label: 'Mes commandes',    icon: ClipboardList },
   { href: '/projets',    label: 'Projets',          icon: FolderOpen },
+  { href: '/analytics',  label: 'Analytics',        icon: BarChart3 },
+  { href: '/academie',  label: 'Académie',         icon: GraduationCap },
   { href: '/support',    label: 'Support',          icon: HeadphonesIcon },
   { href: '/ressources', label: 'Ressources',       icon: BookOpen },
 ]

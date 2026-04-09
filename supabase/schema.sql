@@ -690,3 +690,67 @@ create trigger leads_updated_at before update on public.leads
 
 create index if not exists idx_leads_user_id on public.leads (user_id);
 create index if not exists idx_leads_status on public.leads (status);
+
+
+-- ============================================================
+-- ACADÉMIE + GAMIFICATION
+-- ============================================================
+
+create table if not exists public.academy_modules (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  description text,
+  category    text not null,
+  duration    text,
+  difficulty  text default 'beginner' check (difficulty in ('beginner','intermediate','advanced')),
+  sort_order  integer default 0,
+  content     text,
+  video_url   text,
+  created_at  timestamptz default now()
+);
+
+create table if not exists public.user_module_progress (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid references auth.users(id) on delete cascade not null,
+  module_id    uuid references public.academy_modules(id) on delete cascade not null,
+  status       text default 'not_started' check (status in ('not_started','in_progress','completed')),
+  completed_at timestamptz,
+  created_at   timestamptz default now(),
+  unique(user_id, module_id)
+);
+
+create table if not exists public.badges (
+  id              uuid primary key default gen_random_uuid(),
+  name            text not null,
+  description     text,
+  icon            text,
+  color           text,
+  condition_type  text not null,
+  condition_value numeric default 0,
+  created_at      timestamptz default now()
+);
+
+create table if not exists public.user_badges (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references auth.users(id) on delete cascade not null,
+  badge_id    uuid references public.badges(id) on delete cascade not null,
+  unlocked_at timestamptz default now(),
+  unique(user_id, badge_id)
+);
+
+-- RLS
+alter table public.academy_modules enable row level security;
+alter table public.user_module_progress enable row level security;
+alter table public.badges enable row level security;
+alter table public.user_badges enable row level security;
+
+create policy "Voir modules" on public.academy_modules for select using (auth.uid() is not null);
+create policy "Voir sa progression" on public.user_module_progress for select using (auth.uid() = user_id);
+create policy "Modifier sa progression" on public.user_module_progress for insert with check (auth.uid() = user_id);
+create policy "Update progression" on public.user_module_progress for update using (auth.uid() = user_id);
+create policy "Voir badges" on public.badges for select using (auth.uid() is not null);
+create policy "Voir ses badges" on public.user_badges for select using (auth.uid() = user_id);
+create policy "Debloquer badge" on public.user_badges for insert with check (auth.uid() = user_id);
+
+create index if not exists idx_user_progress_user on public.user_module_progress (user_id);
+create index if not exists idx_user_badges_user on public.user_badges (user_id);
