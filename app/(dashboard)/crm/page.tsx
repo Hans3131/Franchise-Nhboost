@@ -118,7 +118,9 @@ export default function CRMPage() {
       sector: form.sector || undefined,
       address: form.address || undefined,
       commercial_status: form.commercial_status,
-      upsell_potential: (form.upsell_potential as UpsellPotential) || undefined,
+      upsell_potential: (form.upsell_potential as UpsellPotential) || 'medium',
+      pipeline_stage: 'lead_received',
+      deal_value: 0,
     })
     setForm({
       company_name: '', contact_name: '', email: '', phone: '',

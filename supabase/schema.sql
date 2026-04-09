@@ -609,3 +609,29 @@ create index if not exists idx_clients_user_id on public.clients (user_id);
 create index if not exists idx_clients_status on public.clients (commercial_status);
 create index if not exists idx_client_notes_client_id on public.client_notes (client_id);
 create index if not exists idx_orders_client_id on public.orders (client_id);
+
+
+-- ============================================================
+-- PIPELINE COMMERCIAL
+-- ============================================================
+
+-- ─── Historique pipeline ──────────────────────────────────────
+create table if not exists public.pipeline_history (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   uuid references public.clients(id) on delete cascade not null,
+  user_id     uuid references auth.users(id) on delete cascade not null,
+  from_stage  text,
+  to_stage    text not null,
+  note        text,
+  created_at  timestamptz default now()
+);
+
+alter table public.pipeline_history enable row level security;
+
+create policy "Voir historique pipeline" on public.pipeline_history for select
+  using (client_id in (select id from public.clients where user_id = auth.uid()));
+create policy "Creer historique pipeline" on public.pipeline_history for insert
+  with check (client_id in (select id from public.clients where user_id = auth.uid()));
+
+create index if not exists idx_pipeline_history_client on public.pipeline_history (client_id);
+create index if not exists idx_clients_pipeline_stage on public.clients (pipeline_stage);

@@ -167,6 +167,8 @@ export type CommercialStatus = 'prospect' | 'qualified' | 'active' | 'inactive' 
 export type UpsellPotential = 'low' | 'medium' | 'high'
 export type NoteType = 'note' | 'call' | 'email' | 'meeting' | 'followup' | 'upsell'
 
+export type PipelineStage = 'lead_received' | 'contacted' | 'quote_sent' | 'negotiation' | 'won' | 'lost'
+
 export interface Client {
   id: string
   user_id: string
@@ -185,6 +187,10 @@ export interface Client {
   notes?: string
   commercial_status: CommercialStatus
   upsell_potential: UpsellPotential
+  pipeline_stage: PipelineStage
+  deal_value: number
+  expected_close_date?: string
+  loss_reason?: string
   created_at: string
   updated_at: string
 }
@@ -197,5 +203,15 @@ export interface ClientNote {
   content: string
   followup_date?: string
   completed: boolean
+  created_at: string
+}
+
+export interface PipelineHistoryEntry {
+  id: string
+  client_id: string
+  user_id: string
+  from_stage?: string
+  to_stage: string
+  note?: string
   created_at: string
 }
