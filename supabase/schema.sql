@@ -533,3 +533,79 @@ create index if not exists idx_devis_status on public.devis (status);
 create index if not exists idx_factures_user_id on public.factures (user_id);
 create index if not exists idx_factures_status on public.factures (status);
 create index if not exists idx_chat_sessions_user_id on public.chat_sessions (user_id);
+
+
+-- ============================================================
+-- CRM — Gestion clients franchisé
+-- ============================================================
+
+-- ─── Clients ──────────────────────────────────────────────────
+create table if not exists public.clients (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid references auth.users(id) on delete cascade not null,
+  company_name      text not null,
+  contact_name      text,
+  email             text,
+  phone             text,
+  whatsapp          text,
+  website           text,
+  instagram         text,
+  facebook          text,
+  tiktok            text,
+  vat_number        text,
+  sector            text,
+  address           text,
+  notes             text,
+  commercial_status text default 'prospect'
+                      check (commercial_status in ('prospect','qualified','active','inactive','lost')),
+  upsell_potential  text default 'medium'
+                      check (upsell_potential in ('low','medium','high')),
+  created_at        timestamptz default now(),
+  updated_at        timestamptz default now()
+);
+
+-- ─── Notes / Activités client ─────────────────────────────────
+create table if not exists public.client_notes (
+  id            uuid primary key default gen_random_uuid(),
+  client_id     uuid references public.clients(id) on delete cascade not null,
+  user_id       uuid references auth.users(id) on delete cascade not null,
+  type          text default 'note'
+                  check (type in ('note','call','email','meeting','followup','upsell')),
+  content       text not null,
+  followup_date date,
+  completed     boolean default false,
+  created_at    timestamptz default now()
+);
+
+-- ─── Lien client → commandes / devis / factures ───────────────
+-- (colonnes ajoutées via ALTER dans la migration)
+
+-- ─── updated_at trigger ───────────────────────────────────────
+drop trigger if exists clients_updated_at on public.clients;
+create trigger clients_updated_at
+  before update on public.clients
+  for each row execute function public.set_updated_at();
+
+-- ─── RLS ──────────────────────────────────────────────────────
+alter table public.clients       enable row level security;
+alter table public.client_notes  enable row level security;
+
+create policy "Voir ses clients"    on public.clients for select using (auth.uid() = user_id);
+create policy "Creer un client"     on public.clients for insert with check (auth.uid() = user_id);
+create policy "Modifier son client" on public.clients for update using (auth.uid() = user_id);
+create policy "Supprimer son client" on public.clients for delete using (auth.uid() = user_id);
+
+create policy "Voir notes client"   on public.client_notes for select
+  using (client_id in (select id from public.clients where user_id = auth.uid()));
+create policy "Creer note"          on public.client_notes for insert
+  with check (client_id in (select id from public.clients where user_id = auth.uid()));
+create policy "Modifier note"       on public.client_notes for update
+  using (client_id in (select id from public.clients where user_id = auth.uid()));
+create policy "Supprimer note"      on public.client_notes for delete
+  using (client_id in (select id from public.clients where user_id = auth.uid()));
+
+-- ─── Indexes ──────────────────────────────────────────────────
+create index if not exists idx_clients_user_id on public.clients (user_id);
+create index if not exists idx_clients_status on public.clients (commercial_status);
+create index if not exists idx_client_notes_client_id on public.client_notes (client_id);
+create index if not exists idx_orders_client_id on public.orders (client_id);

@@ -160,3 +160,42 @@ export interface ChatSession {
   created_at: string
   updated_at: string
 }
+
+// ─── CRM ────────────────────────────────────────────────────
+
+export type CommercialStatus = 'prospect' | 'qualified' | 'active' | 'inactive' | 'lost'
+export type UpsellPotential = 'low' | 'medium' | 'high'
+export type NoteType = 'note' | 'call' | 'email' | 'meeting' | 'followup' | 'upsell'
+
+export interface Client {
+  id: string
+  user_id: string
+  company_name: string
+  contact_name?: string
+  email?: string
+  phone?: string
+  whatsapp?: string
+  website?: string
+  instagram?: string
+  facebook?: string
+  tiktok?: string
+  vat_number?: string
+  sector?: string
+  address?: string
+  notes?: string
+  commercial_status: CommercialStatus
+  upsell_potential: UpsellPotential
+  created_at: string
+  updated_at: string
+}
+
+export interface ClientNote {
+  id: string
+  client_id: string
+  user_id: string
+  type: NoteType
+  content: string
+  followup_date?: string
+  completed: boolean
+  created_at: string
+}
