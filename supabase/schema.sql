@@ -19,6 +19,7 @@ create table if not exists public.profiles (
   franchise_code text unique,
   phone          text,
   address        text,
+  role           text default 'franchisee' check (role in ('franchisee','admin','super_admin')),
   created_at     timestamptz default now(),
   updated_at     timestamptz default now()
 );
@@ -754,3 +755,22 @@ create policy "Debloquer badge" on public.user_badges for insert with check (aut
 
 create index if not exists idx_user_progress_user on public.user_module_progress (user_id);
 create index if not exists idx_user_badges_user on public.user_badges (user_id);
+
+
+-- ============================================================
+-- ADMIN — Alertes intelligentes
+-- ============================================================
+
+create table if not exists public.admin_alerts (
+  id           uuid primary key default gen_random_uuid(),
+  type         text not null check (type in ('inactive_franchise','unprocessed_lead','low_conversion','late_order','no_coaching')),
+  severity     text default 'warning' check (severity in ('info','warning','critical')),
+  franchise_id uuid references auth.users(id) on delete cascade,
+  title        text not null,
+  message      text,
+  resolved     boolean default false,
+  created_at   timestamptz default now()
+);
+
+alter table public.admin_alerts enable row level security;
+create index if not exists idx_admin_alerts_resolved on public.admin_alerts (resolved) where resolved = false;

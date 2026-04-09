@@ -48,10 +48,25 @@ export async function proxy(request: NextRequest) {
 
   // Protège toutes les routes du dashboard
   const isProtected = PROTECTED_PREFIXES.some(p => pathname.startsWith(p))
-  if (!user && isProtected) {
+  const isAdmin = pathname.startsWith('/admin')
+
+  if (!user && (isProtected || isAdmin)) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirectTo', pathname)
     return NextResponse.redirect(loginUrl)
+  }
+
+  // Protège les routes admin — vérifie le role
+  if (user && isAdmin) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    const role = profile?.role ?? 'franchisee'
+    if (role !== 'admin' && role !== 'super_admin') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
   }
 
   // Redirige vers /dashboard si déjà connecté et accès à /login
