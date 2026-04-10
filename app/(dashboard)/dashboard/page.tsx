@@ -5,12 +5,13 @@ import { motion } from 'framer-motion'
 import { getAll, type LocalOrder } from '@/lib/orderStore'
 import { createClient } from '@/lib/supabase/client'
 import {
-  Euro, ShoppingCart, TrendingUp, ArrowRight,
+  Euro, ShoppingCart, TrendingUp, TrendingDown, ArrowRight,
   ClipboardList, FolderOpen, HeadphonesIcon, BookOpen,
   Trophy, CheckCircle2, Target,
 } from 'lucide-react'
 import Link from 'next/link'
 import KPICard from '@/components/dashboard/KPICard'
+import { FinancialChart } from '@/components/dashboard/FinancialChart'
 import { cn } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -18,9 +19,15 @@ type Period = 'month' | 'year' | 'all'
 
 interface OrderRow {
   ref: string; service: string; client_name: string
-  price: number; cost: number
-  sale_price: number; actual_sale_price: number; internal_cost: number; profit: number
-  quantity: number
+  // Totaux déjà agrégés par commande (tous items confondus)
+  price: number                 // = real_revenue
+  cost: number                  // = total_cost
+  theoretical_revenue: number
+  real_revenue: number
+  total_cost: number
+  real_profit: number
+  variance: number
+  quantity: number              // = total_quantity
   status: string; created_at: string
 }
 
@@ -38,31 +45,38 @@ function filterByPeriod(orders: OrderRow[], period: Period): OrderRow[] {
   })
 }
 
-function getMonthlyData(orders: OrderRow[]) {
-  const months: { key: string; label: string; revenue: number }[] = []
-  for (let i = 5; i >= 0; i--) {
+export interface ChartPoint {
+  key: string
+  label: string
+  theoretical: number
+  real: number
+  cost: number
+  profit: number
+}
+
+function getMonthlyData(orders: OrderRow[], monthCount = 6): ChartPoint[] {
+  const points: ChartPoint[] = []
+  const completed = orders.filter(o => o.status === 'completed')
+
+  for (let i = monthCount - 1; i >= 0; i--) {
     const d = new Date(currentYear, currentMonth - i, 1)
     const m = d.getMonth()
     const y = d.getFullYear()
-    const label = d.toLocaleDateString('fr-FR', { month: 'short' })
-    const revenue = orders
-      .filter(o => o.status === 'completed')
-      .filter(o => { const od = new Date(o.created_at); return od.getMonth() === m && od.getFullYear() === y })
-      .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price) * (o.quantity ?? 1), 0)
-    months.push({ key: `${y}-${m}`, label: label.charAt(0).toUpperCase() + label.slice(1), revenue })
+    const label = d.toLocaleDateString('fr-FR', { month: 'short' }).replace(/^./, c => c.toUpperCase())
+    const monthly = completed.filter(o => {
+      const od = new Date(o.created_at)
+      return od.getMonth() === m && od.getFullYear() === y
+    })
+    points.push({
+      key: `${y}-${m}`,
+      label,
+      theoretical: monthly.reduce((s, o) => s + o.theoretical_revenue, 0),
+      real: monthly.reduce((s, o) => s + o.real_revenue, 0),
+      cost: monthly.reduce((s, o) => s + o.total_cost, 0),
+      profit: monthly.reduce((s, o) => s + o.real_profit, 0),
+    })
   }
-  // Current month
-  const cd = new Date()
-  const cRev = orders
-    .filter(o => o.status === 'completed')
-    .filter(o => { const od = new Date(o.created_at); return od.getMonth() === currentMonth && od.getFullYear() === currentYear })
-    .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price ?? o.price) * (o.quantity ?? 1), 0)
-  months.push({
-    key: `${currentYear}-${currentMonth}-current`,
-    label: cd.toLocaleDateString('fr-FR', { month: 'short' }).replace(/^./, c => c.toUpperCase()),
-    revenue: cRev,
-  })
-  return months
+  return points
 }
 
 const fmt = (n: number) => '€' + n.toLocaleString('fr-FR')
@@ -132,16 +146,26 @@ export default function DashboardPage() {
 
     // Orders — localStorage immédiat
     const localOrders = getAll()
-    setOrders(localOrders.map(o => ({
-      ref: o.ref, service: o.service, client_name: o.client_name,
-      price: o.price, cost: o.cost ?? 0,
-        sale_price: o.sale_price ?? o.price,
-        actual_sale_price: o.actual_sale_price ?? o.sale_price ?? o.price,
-        internal_cost: o.internal_cost ?? o.cost,
-        profit: o.profit ?? (o.price - (o.cost > 0 ? o.cost : Math.round(o.price * 0.64))),
-        quantity: o.quantity ?? 1,
+    setOrders(localOrders.map(o => {
+      const qty = o.quantity ?? 1
+      const recommendedUnit = o.sale_price ?? o.price
+      const actualUnit = o.actual_sale_price ?? o.sale_price ?? o.price
+      const costUnit = o.internal_cost ?? (o.cost && o.cost > 0 ? o.cost / qty : Math.round(o.price * 0.36))
+      const real = actualUnit * qty
+      const theo = recommendedUnit * qty
+      const total_cost = costUnit * qty
+      return {
+        ref: o.ref, service: o.service, client_name: o.client_name,
+        price: real, cost: total_cost,
+        theoretical_revenue: theo,
+        real_revenue: real,
+        total_cost,
+        real_profit: real - total_cost,
+        variance: theo - real,
+        quantity: qty,
         status: o.status, created_at: o.created_at,
-    })))
+      }
+    }))
     setLoading(false)
 
     // Supabase data
@@ -157,42 +181,70 @@ export default function DashboardPage() {
             setFranchiseId(code)
           }
         })
-      // Orders from Supabase
-      supabase.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-        .then(({ data: rows, error }) => {
-          if (!error && rows && rows.length > 0) {
-            setOrders(rows.map(r => ({
-              ref: r.ref ?? r.id, service: r.service, client_name: r.client_name ?? '',
-              price: Number(r.price ?? 0), cost: Number(r.cost ?? 0),
-              sale_price: Number(r.sale_price ?? r.price ?? 0),
-              actual_sale_price: Number(r.actual_sale_price ?? r.sale_price ?? r.price ?? 0),
-              internal_cost: Number(r.internal_cost ?? r.cost ?? 0),
-              profit: Number(r.profit ?? 0),
-              quantity: Number(r.quantity ?? 1),
-              status: r.status ?? 'pending', created_at: r.created_at ?? new Date().toISOString(),
-            })))
-          }
-        })
+      // Préférentiellement, lit la view order_financials (agrégation par order + items)
+      ;(async () => {
+        const [{ data: fin }, { data: rawOrders }] = await Promise.all([
+          supabase.from('order_financials').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+          supabase.from('orders').select('ref, service, client_name, status, created_at, price, cost').eq('user_id', user.id),
+        ])
+
+        if (fin && fin.length > 0) {
+          // Enrichit avec les infos client (service name, client_name) depuis orders
+          const rawById = new Map<string, Record<string, unknown>>((rawOrders ?? []).map(r => [String(r.ref ?? ''), r as Record<string, unknown>]))
+          setOrders(fin.map(r => {
+            const raw = rawById.get(String(r.ref ?? ''))
+            const theoretical = Number(r.theoretical_revenue ?? 0)
+            const real = Number(r.real_revenue ?? 0)
+            const cost = Number(r.total_cost ?? 0)
+            return {
+              ref: String(r.ref ?? r.id),
+              service: String(r.service ?? raw?.service ?? ''),
+              client_name: String(raw?.client_name ?? ''),
+              price: real || Number(raw?.price ?? 0),
+              cost: cost || Number(raw?.cost ?? 0),
+              theoretical_revenue: theoretical,
+              real_revenue: real,
+              total_cost: cost,
+              real_profit: Number(r.real_profit ?? real - cost),
+              variance: Number(r.variance ?? theoretical - real),
+              quantity: Number(r.total_quantity ?? 1),
+              status: String(r.status ?? 'pending'),
+              created_at: String(r.created_at ?? new Date().toISOString()),
+            }
+          }))
+        } else if (rawOrders && rawOrders.length > 0) {
+          // Fallback (backfill pas encore exécuté)
+          setOrders(rawOrders.map(r => ({
+            ref: String(r.ref ?? ''), service: String(r.service ?? ''), client_name: String(r.client_name ?? ''),
+            price: Number(r.price ?? 0), cost: Number(r.cost ?? 0),
+            theoretical_revenue: Number(r.price ?? 0),
+            real_revenue: Number(r.price ?? 0),
+            total_cost: Number(r.cost ?? 0),
+            real_profit: Number(r.price ?? 0) - Number(r.cost ?? 0),
+            variance: 0,
+            quantity: 1,
+            status: String(r.status ?? 'pending'),
+            created_at: String(r.created_at ?? new Date().toISOString()),
+          })))
+        }
+      })()
     })
   }, [])
 
   // ─── Computed KPIs ─────────────────────────────────────────
   const filtered  = useMemo(() => filterByPeriod(orders, period), [orders, period])
   const completed = useMemo(() => filtered.filter(o => o.status === 'completed'), [filtered])
-  // CA théorique = somme des (prix conseillé × quantité)
-  const theoreticalRevenue = useMemo(() => completed.reduce((s, o) => s + o.sale_price * (o.quantity ?? 1), 0), [completed])
-  // CA réel = somme des (prix réellement facturé × quantité)
-  const revenue   = useMemo(() => completed.reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price) * (o.quantity ?? 1), 0), [completed])
-  // Coûts internes NHBoost × quantité
-  const costs     = useMemo(() => completed.reduce((s, o) => s + o.internal_cost * (o.quantity ?? 1), 0), [completed])
-  // Bénéfice réel = CA réel - Coûts
-  const profit    = revenue - costs
-  // Écart théorique vs réel (positif = vendu sous le conseil)
-  const variance  = theoreticalRevenue - revenue
+  // KPIs agrégés depuis order_financials (view SQL) ou le fallback client
+  const theoreticalRevenue = useMemo(() => completed.reduce((s, o) => s + o.theoretical_revenue, 0), [completed])
+  const revenue  = useMemo(() => completed.reduce((s, o) => s + o.real_revenue, 0), [completed])
+  const costs    = useMemo(() => completed.reduce((s, o) => s + o.total_cost, 0), [completed])
+  const profit   = useMemo(() => completed.reduce((s, o) => s + o.real_profit, 0), [completed])
+  const variance = useMemo(() => completed.reduce((s, o) => s + o.variance, 0), [completed])
 
   // ─── Chart data ────────────────────────────────────────────
-  const chartData = useMemo(() => getMonthlyData(orders), [orders])
-  const maxChart  = useMemo(() => Math.max(...chartData.map(d => d.revenue), 1), [chartData])
+  // Nb de mois selon la période : 6 / 12 / 24
+  const chartMonths = period === 'all' ? 24 : period === 'year' ? 12 : 6
+  const chartData = useMemo(() => getMonthlyData(orders, chartMonths), [orders, chartMonths])
 
   // ─── Recent orders (always from all) ───────────────────────
   const recent = useMemo(() => orders.slice(0, 5).map(o => ({
@@ -239,12 +291,58 @@ export default function DashboardPage() {
     .replace(/^./, c => c.toUpperCase())
 
   const periodLabel = PERIOD_OPTS.find(p => p.key === period)!.label
+
+  // Pourcentages dérivés pour les deltas
+  const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0
+  const variancePct = theoreticalRevenue > 0 ? (Math.abs(variance) / theoreticalRevenue) * 100 : 0
+  const realVsTheoPct = theoreticalRevenue > 0 ? (revenue / theoreticalRevenue) * 100 : 0
+
   const KPI_DATA = [
-    { label: "CA théorique",    value: loading ? '…' : fmt(theoreticalRevenue), delta: periodLabel, trend: 'up' as const,   icon: Target,       iconColor: '#8B5CF6' },
-    { label: "CA réel",         value: loading ? '…' : fmt(revenue),            delta: periodLabel, trend: 'up' as const,   icon: Euro,         iconColor: '#6AAEE5' },
-    { label: 'Coûts totaux',    value: loading ? '…' : fmt(costs),              delta: periodLabel, trend: 'down' as const, icon: ShoppingCart, iconColor: '#F59E0B' },
-    { label: 'Bénéfice réel',   value: loading ? '…' : fmt(profit),             delta: periodLabel, trend: profit >= 0 ? 'up' as const : 'down' as const, icon: TrendingUp, iconColor: '#22C55E' },
-    { label: 'Écart vs conseil', value: loading ? '…' : fmt(variance),           delta: variance > 0 ? 'Sous le conseil' : variance < 0 ? 'Au-dessus' : 'Conforme', trend: variance <= 0 ? 'up' as const : 'down' as const, icon: TrendingUp, iconColor: variance > 0 ? '#EF4444' : '#22C55E' },
+    {
+      label: 'CA théorique',
+      value: loading ? '…' : fmt(theoreticalRevenue),
+      delta: `Prix conseillés · ${periodLabel}`,
+      trend: 'neutral' as const,
+      icon: Target,
+      iconColor: '#8B95C4',
+    },
+    {
+      label: 'CA réel',
+      value: loading ? '…' : fmt(revenue),
+      delta: theoreticalRevenue > 0 ? `${realVsTheoPct.toFixed(0)}% du conseil` : periodLabel,
+      trend: realVsTheoPct >= 100 ? ('up' as const) : ('down' as const),
+      icon: Euro,
+      iconColor: '#6AAEE5',
+    },
+    {
+      label: 'Coûts totaux',
+      value: loading ? '…' : fmt(costs),
+      delta: revenue > 0 ? `${((costs / revenue) * 100).toFixed(0)}% du CA` : periodLabel,
+      trend: 'down' as const,
+      icon: ShoppingCart,
+      iconColor: '#F59E0B',
+    },
+    {
+      label: 'Bénéfice réel',
+      value: loading ? '…' : fmt(profit),
+      delta: revenue > 0 ? `Marge ${marginPct.toFixed(1)}%` : periodLabel,
+      trend: profit >= 0 ? ('up' as const) : ('down' as const),
+      icon: TrendingUp,
+      iconColor: '#22C55E',
+    },
+    {
+      label: 'Écart vs conseil',
+      value: loading ? '…' : (variance >= 0 ? '−' : '+') + fmt(Math.abs(variance)),
+      delta:
+        Math.abs(variance) < 0.5
+          ? 'Aligné sur le conseil'
+          : variance > 0
+            ? `Sous conseil · −${variancePct.toFixed(1)}%`
+            : `Au-dessus · +${variancePct.toFixed(1)}%`,
+      trend: variance <= 0 ? ('up' as const) : ('down' as const),
+      icon: variance > 0 ? TrendingDown : TrendingUp,
+      iconColor: variance > 0 ? '#EF4444' : '#22C55E',
+    },
   ]
 
   return (
@@ -293,46 +391,10 @@ export default function DashboardPage() {
       {/* ── Chart + Quick Actions ──────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }}
-          className="lg:col-span-2 rounded-2xl border border-[#E2E8F2] bg-white p-6 shadow-[0_1px_3px_rgba(45,45,96,0.07)]"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1">
-                Chiffre d&apos;affaires mensuel
-              </h2>
-              <p className="text-2xl font-bold text-[#2d2d60] tracking-tight">{fmt(revenue)}</p>
-            </div>
-          </div>
-          <div className="flex items-end gap-2 h-32">
-            {chartData.map((bar, i) => {
-              const isLast = i === chartData.length - 1
-              const pct = maxChart > 0 ? (bar.revenue / maxChart) * 100 : 0
-              return (
-                <div key={bar.key} className="flex-1 flex flex-col items-center gap-1.5">
-                  <div className="w-full flex items-end justify-center" style={{ height: '110px' }}>
-                    <motion.div
-                      initial={{ height: 0 }}
-                      animate={{ height: `${Math.max(pct, 4)}%` }}
-                      transition={{ duration: 0.6, delay: 0.4 + i * 0.06 }}
-                      className={cn(
-                        'w-full rounded-t-md',
-                        isLast
-                          ? 'bg-gradient-to-t from-[#2d2d60] to-[#4a81a4]'
-                          : 'bg-[#E8EDF4] hover:bg-[#D1DCE8] transition-colors'
-                      )}
-                    />
-                  </div>
-                  <span className={cn('text-[10px] font-medium', isLast ? 'text-[#4a81a4]' : 'text-[#9CA3AF]')}>
-                    {bar.label}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </motion.div>
+        {/* Financial Chart (Recharts) */}
+        <div className="lg:col-span-2">
+          <FinancialChart data={chartData} loading={loading} />
+        </div>
 
         {/* Quick Actions */}
         <motion.div
