@@ -242,6 +242,9 @@ export default function CommanderPage() {
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 400))
 
+    // ID Supabase de la commande créée (hoisté pour la redirection Stripe)
+    let supabaseOrderId: string | null = null
+
     // Totaux agrégés depuis les lignes
     const totalReal = linesTotals.real
     const totalCost = linesTotals.cost
@@ -415,6 +418,8 @@ export default function CommanderPage() {
         if (sbError || !createdOrder) {
           console.error('Supabase order insert error:', sbError?.message)
         } else {
+          // Hoist l'id pour la redirection Stripe en fin de fonction
+          supabaseOrderId = createdOrder.id as string
           // 2) Insérer toutes les lignes de service en une seule requête
           const itemsPayload = lines.map((line, idx) => ({
             order_id:               createdOrder.id as string,
@@ -443,6 +448,32 @@ export default function CommanderPage() {
       link:    '/commandes',
     })
 
+    // ── Redirection Stripe Checkout (paiement unique) ──────
+    // Si la commande est bien persistée en DB, on crée une session Stripe
+    // et on redirige le franchisé. Le webhook mettra payment_status à 'paid'
+    // après confirmation du paiement.
+    if (supabaseOrderId) {
+      try {
+        const checkoutRes = await fetch('/api/payments/checkout-one-shot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: supabaseOrderId }),
+        })
+        const checkoutData = await checkoutRes.json()
+        if (checkoutRes.ok && checkoutData.url) {
+          // Redirection vers Stripe — la page success/cancel prend le relais
+          window.location.href = checkoutData.url
+          return
+        } else {
+          console.warn('[Stripe] checkout failed:', checkoutData.error)
+          // On tombe dans le fallback ci-dessous (écran de confirmation sans paiement)
+        }
+      } catch (e) {
+        console.error('[Stripe] checkout exception:', e)
+      }
+    }
+
+    // Fallback : écran de confirmation classique (pas de redirection Stripe)
     setSubmitting(false)
     setNewOrderRef(order.ref)
     setSubmitted(true)
