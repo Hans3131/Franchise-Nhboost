@@ -14,6 +14,7 @@ import {
 import Link from 'next/link'
 import { cn, formatPrice, formatDate } from '@/lib/utils'
 import type { OrderStatus } from '@/types'
+import { FinancialCard } from '@/components/orders/FinancialCard'
 
 // ─── Types ────────────────────────────────────────────────────
 type ServiceType = 'website' | 'campaign' | 'standard'
@@ -41,9 +42,28 @@ interface Order {
   price:                   number
   status:                  OrderStatus
   paymentStatus:           'paid' | 'unpaid' | 'refunded'
+  // ── Finances ──
+  salePrice:               number   // prix conseillé (unitaire)
+  actualSalePrice:         number   // prix réellement facturé (unitaire)
+  internalCost:            number   // coût interne (unitaire)
+  quantity:                number
 }
 
 function mapRow(row: Record<string, unknown>): Order {
+  const price = Number(row.price ?? 0)
+  const qty = Math.max(1, Number(row.quantity ?? 1))
+  const actualUnit = row.actual_sale_price != null
+    ? Number(row.actual_sale_price)
+    : row.sale_price != null
+      ? Number(row.sale_price)
+      : price / qty
+  const recommendedUnit = row.sale_price != null ? Number(row.sale_price) : actualUnit
+  const costUnit = row.internal_cost != null
+    ? Number(row.internal_cost)
+    : row.cost != null
+      ? Number(row.cost) / qty
+      : 0
+
   return {
     id:             String(row.id),
     ref:            String(row.ref ?? ('CMD-' + String(row.id).slice(0, 8).toUpperCase())),
@@ -61,9 +81,13 @@ function mapRow(row: Record<string, unknown>): Order {
     serviceType:     (row.service_type as ServiceType) ?? 'standard',
     internalProgress: (row.internal_progress_status as InternalProgress) ?? 'pending',
     date:            String(row.created_at     ?? ''),
-    price:          Number(row.price          ?? 0),
+    price,
     status:         (row.status         as OrderStatus)           ?? 'pending',
     paymentStatus:  (row.payment_status as Order['paymentStatus']) ?? 'unpaid',
+    salePrice:       recommendedUnit,
+    actualSalePrice: actualUnit,
+    internalCost:    costUnit,
+    quantity:        qty,
   }
 }
 
@@ -629,6 +653,21 @@ export default function CommandesPage() {
 
   const totalFiltered = useMemo(() => filtered.reduce((s, o) => s + o.price, 0), [filtered])
 
+  // ── KPIs financiers globaux (commandes complétées uniquement) ──
+  const financialTotals = useMemo(() => {
+    const completed = orders.filter(o => o.status === 'completed')
+    const theoretical = completed.reduce((s, o) => s + o.salePrice * o.quantity, 0)
+    const real = completed.reduce((s, o) => s + o.actualSalePrice * o.quantity, 0)
+    const cost = completed.reduce((s, o) => s + o.internalCost * o.quantity, 0)
+    return {
+      theoretical,
+      real,
+      cost,
+      profit: real - cost,
+      variance: theoretical - real,
+    }
+  }, [orders])
+
   // 3 sections triees
   const pendingOrders    = useMemo(() => filtered.filter(o => o.status === 'pending'), [filtered])
   const inProgressOrders = useMemo(() => filtered.filter(o => o.status === 'in_progress'), [filtered])
@@ -662,17 +701,14 @@ export default function CommandesPage() {
       {/* KPI strip */}
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
-        className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
       >
         {[
-          { label: 'Total commandes', value: loading ? '…' : orders.length,        icon: Inbox,        color: '#6AAEE5' },
-          { label: 'En cours',        value: loading ? '…' : counts.in_progress,   icon: ShoppingCart, color: '#6AAEE5' },
-          { label: 'Terminées',       value: loading ? '…' : counts.completed,     icon: CheckCircle2, color: '#22C55E' },
-          {
-            label: "Chiffre d'aff.",
-            value: loading ? '…' : formatPrice(orders.filter(o => o.status === 'completed').reduce((s, o) => s + o.price, 0)),
-            icon: Euro, color: '#22C55E',
-          },
+          { label: 'Total commandes', value: loading ? '…' : String(orders.length),               icon: Inbox,        color: '#6AAEE5' },
+          { label: 'CA théorique',    value: loading ? '…' : formatPrice(financialTotals.theoretical), icon: Target,       color: '#8B95C4' },
+          { label: 'CA réel',         value: loading ? '…' : formatPrice(financialTotals.real),        icon: Euro,         color: '#6AAEE5' },
+          { label: 'Coûts internes',  value: loading ? '…' : formatPrice(financialTotals.cost),        icon: ShoppingCart, color: '#EF4444' },
+          { label: 'Bénéfice réel',   value: loading ? '…' : formatPrice(financialTotals.profit),      icon: CheckCircle2, color: '#22C55E' },
         ].map((kpi, i) => {
           const Icon = kpi.icon
           return (
@@ -869,6 +905,14 @@ export default function CommandesPage() {
                               </div>
                             </div>
 
+                            {/* Financial card — CA théo vs réel + marge */}
+                            <FinancialCard
+                              recommendedPrice={order.salePrice}
+                              actualPrice={order.actualSalePrice}
+                              internalCost={order.internalCost}
+                              quantity={order.quantity}
+                            />
+
                             {/* Progress stepper (site web ou campagne) */}
                             {(isWebsiteService(order.service) || isCampaignService(order.service)) && order.status !== 'cancelled' && (() => {
                               const { steps: svcSteps, index: svcIdx } = getStepsForService(order.service, order.status, order.serviceType, order.internalProgress)
@@ -1060,6 +1104,15 @@ export default function CommandesPage() {
                                     <span className="text-[11px] font-medium" style={{ color: p.color }}>{p.label}</span>
                                   </div>
                                 </div>
+
+                                {/* Financial card — CA théo vs réel + marge */}
+                                <FinancialCard
+                                  recommendedPrice={order.salePrice}
+                                  actualPrice={order.actualSalePrice}
+                                  internalCost={order.internalCost}
+                                  quantity={order.quantity}
+                                />
+
                                 <button onClick={e => { e.stopPropagation(); setDetailOrder(order) }}
                                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-semibold text-white transition-all hover:opacity-90"
                                   style={{ background: 'linear-gradient(135deg, #6AAEE5, #2B3580)' }}>
@@ -1135,6 +1188,15 @@ export default function CommandesPage() {
                                         </div>
                                         <p className="text-[18px] font-bold font-mono text-[#2d2d60]">{formatPrice(order.price)}</p>
                                       </div>
+
+                                      {/* Financial card — CA théo vs réel + marge */}
+                                      <FinancialCard
+                                        recommendedPrice={order.salePrice}
+                                        actualPrice={order.actualSalePrice}
+                                        internalCost={order.internalCost}
+                                        quantity={order.quantity}
+                                      />
+
                                       {order.deliverablesUrl && (
                                         <a href={order.deliverablesUrl} target="_blank" rel="noopener noreferrer"
                                           className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-[#22C55E]/5 to-[#22C55E]/10 border border-[#22C55E]/20 hover:border-[#22C55E]/40 transition-all group">
