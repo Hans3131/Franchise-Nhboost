@@ -15,6 +15,13 @@ import {
 import { insert as storeInsert } from '@/lib/orderStore'
 import { insert as notifInsert } from '@/lib/notificationStore'
 import { cn, formatPrice } from '@/lib/utils'
+import {
+  ServiceLinesEditor,
+  buildLineFromService,
+  computeTotals,
+  validateLines,
+  type ServiceLine,
+} from '@/components/orders/ServiceLinesEditor'
 
 // ─── Types ────────────────────────────────────────────────────
 type PaymentMode = 'one-shot' | 'subscription'
@@ -178,17 +185,25 @@ export default function CommanderPage() {
   const [submitted,  setSubmitted]  = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [newOrderRef, setNewOrderRef] = useState('')
-  const [actualSalePrice, setActualSalePrice] = useState<number | null>(null)
-  const [quantity, setQuantity] = useState<number>(1)
+  // Multi-lignes : chaque ligne = un service à facturer
+  const [lines, setLines] = useState<ServiceLine[]>([])
+  const linesValidation = validateLines(lines)
+  const linesTotals = computeTotals(lines)
 
-  const selectedService = SERVICES.find(s => s.id === data.serviceId)
+  // Service "principal" : celui de la 1ère ligne (utile pour les champs conditionnels)
+  const primaryLine = lines[0]
+  const selectedService = primaryLine
+    ? SERVICES.find(s => s.id === primaryLine.serviceSlug)
+    : SERVICES.find(s => s.id === data.serviceId)
 
-  // Auto-init actualSalePrice when service changes
-  useEffect(() => {
-    if (selectedService && actualSalePrice === null) {
-      setActualSalePrice(selectedService.salePrice)
-    }
-  }, [selectedService, actualSalePrice])
+  // Helper : ajoute un service comme nouvelle ligne
+  const addServiceAsLine = useCallback((svcId: string) => {
+    const svc = SERVICES.find(s => s.id === svcId)
+    if (!svc) return
+    setLines(prev => [...prev, buildLineFromService(svc)])
+    // Maintient serviceId pour les champs conditionnels (sites web, campaigns)
+    setData(d => ({ ...d, serviceId: d.serviceId || svcId }))
+  }, [])
 
   const form1 = useForm({ resolver: zodResolver(step1Schema), mode: 'onBlur' })
   const form3 = useForm({ resolver: zodResolver(step3Schema), mode: 'onBlur' })
@@ -218,16 +233,32 @@ export default function CommanderPage() {
     })
 
   const handleSubmitOrder = async () => {
+    // Garde-fou : validation des lignes
+    if (!linesValidation.ok || lines.length === 0) {
+      console.warn('Submit bloqué — lignes invalides', linesValidation.errors)
+      return
+    }
+
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 400))
-    const qty = Math.max(1, quantity)
-    const unitActual = actualSalePrice ?? selectedService?.salePrice ?? 0
-    const unitCost = selectedService?.internalCost ?? 0
-    const unitRecommended = selectedService?.salePrice ?? 0
+
+    // Totaux agrégés depuis les lignes
+    const totalReal = linesTotals.real
+    const totalCost = linesTotals.cost
+    const totalTheoretical = linesTotals.theoretical
+    const totalProfit = linesTotals.profit
+
+    // La 1ère ligne sert de "service principal" pour les champs mono-valeur de `orders`
+    const first = lines[0]
+    const firstSvc = SERVICES.find(s => s.id === first.serviceSlug)
+    const serviceSummary = lines.length === 1
+      ? first.serviceName
+      : `${first.serviceName} (+${lines.length - 1} autre${lines.length > 2 ? 's' : ''})`
+
     const order = storeInsert({
-      service:         selectedService?.name ?? '',
-      service_slug:    selectedService?.id ?? undefined,
-      quantity:        qty,
+      service:         serviceSummary,
+      service_slug:    first.serviceSlug,
+      quantity:        first.quantity,
       client_name:     data.clientName    ?? '',
       client_email:    data.clientEmail   ?? '',
       client_phone:    data.clientPhone,
@@ -242,16 +273,16 @@ export default function CommanderPage() {
       brief:           data.brief,
       objectives:      data.objectives,
       required_access: data.requiredAccess,
-      price:              unitActual * qty,
-      cost:               unitCost * qty,
-      sale_price:         unitRecommended,
-      actual_sale_price:  unitActual,
-      internal_cost:      unitCost,
-      profit:             (unitActual - unitCost) * qty,
-      monthly_price:      selectedService?.monthlyPrice ?? undefined,
-      commitment_months:  selectedService?.commitmentMonths ?? undefined,
-      contract_total:     selectedService?.commitmentMonths
-        ? unitRecommended * selectedService.commitmentMonths * qty
+      price:              totalReal,
+      cost:               totalCost,
+      sale_price:         first.unitRecommendedPrice,
+      actual_sale_price:  first.unitActualPrice,
+      internal_cost:      first.unitCost,
+      profit:             totalProfit,
+      monthly_price:      firstSvc?.monthlyPrice ?? undefined,
+      commitment_months:  firstSvc?.commitmentMonths ?? undefined,
+      contract_total:     firstSvc?.commitmentMonths
+        ? totalTheoretical * firstSvc.commitmentMonths
         : undefined,
       status:             'pending',
       payment_status:     'unpaid',
@@ -324,53 +355,75 @@ export default function CommanderPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        // Résoudre service_id depuis le slug (table services)
-        let resolvedServiceId: string | null = null
-        if (order.service_slug) {
-          const { data: svc } = await supabase
-            .from('services')
-            .select('id')
-            .eq('slug', order.service_slug)
-            .maybeSingle()
-          resolvedServiceId = svc?.id ?? null
+        // Résoudre tous les service_id depuis les slugs (une seule requête)
+        const slugs = Array.from(new Set(lines.map(l => l.serviceSlug)))
+        const { data: catalogRows } = await supabase
+          .from('services')
+          .select('id, slug')
+          .in('slug', slugs)
+        const slugToId = new Map<string, string>((catalogRows ?? []).map(r => [r.slug as string, r.id as string]))
+        const primaryServiceId = slugToId.get(first.serviceSlug) ?? null
+
+        // 1) Insérer l'en-tête orders
+        const { data: createdOrder, error: sbError } = await supabase
+          .from('orders')
+          .insert({
+            user_id:            user.id,
+            service:            order.service,
+            service_id:         primaryServiceId,
+            quantity:           first.quantity,
+            client_name:        order.client_name,
+            client_email:       order.client_email,
+            client_phone:       order.client_phone    ?? null,
+            company_name:       order.company_name    ?? null,
+            company_email:      order.company_email   ?? null,
+            sector:             order.sector          ?? null,
+            vat_number:         order.vat_number      ?? null,
+            website:            order.website         ?? null,
+            instagram:          order.instagram       ?? null,
+            facebook:           order.facebook        ?? null,
+            tiktok:             order.tiktok          ?? null,
+            brief:              order.brief           ?? null,
+            objectives:         order.objectives      ?? null,
+            required_access:    order.required_access ?? null,
+            price:              totalReal,
+            cost:               totalCost,
+            sale_price:         first.unitRecommendedPrice,
+            actual_sale_price:  first.unitActualPrice,
+            internal_cost:      first.unitCost,
+            profit:             totalProfit,
+            monthly_price:      order.monthly_price   ?? null,
+            commitment_months:  order.commitment_months ?? null,
+            contract_total:     order.contract_total  ?? null,
+            status:             'pending',
+            payment_status:     'unpaid',
+            whatsapp_group:     data.whatsappGroup    ?? null,
+            domain_name:        data.domainName       ?? null,
+            specific_request:   data.specificRequest  ?? null,
+            public_token:       order.public_token    ?? crypto.randomUUID(),
+            public_tracking_enabled: true,
+          })
+          .select('id')
+          .single()
+
+        if (sbError || !createdOrder) {
+          console.error('Supabase order insert error:', sbError?.message)
+        } else {
+          // 2) Insérer toutes les lignes de service en une seule requête
+          const itemsPayload = lines.map((line, idx) => ({
+            order_id:               createdOrder.id as string,
+            service_id:             slugToId.get(line.serviceSlug) ?? null,
+            service_name:           line.serviceName,
+            service_slug:           line.serviceSlug,
+            quantity:               line.quantity,
+            unit_recommended_price: line.unitRecommendedPrice,
+            unit_actual_price:      line.unitActualPrice,
+            unit_cost:              line.unitCost,
+            sort_order:             idx,
+          }))
+          const { error: itemsError } = await supabase.from('order_items').insert(itemsPayload)
+          if (itemsError) console.error('Supabase order_items insert error:', itemsError.message)
         }
-        const { error: sbError } = await supabase.from('orders').insert({
-          user_id:            user.id,
-          service:            order.service,
-          service_id:         resolvedServiceId,
-          quantity:           order.quantity ?? 1,
-          client_name:        order.client_name,
-          client_email:       order.client_email,
-          client_phone:       order.client_phone    ?? null,
-          company_name:       order.company_name    ?? null,
-          company_email:      order.company_email   ?? null,
-          sector:             order.sector          ?? null,
-          vat_number:         order.vat_number      ?? null,
-          website:            order.website         ?? null,
-          instagram:          order.instagram       ?? null,
-          facebook:           order.facebook        ?? null,
-          tiktok:             order.tiktok          ?? null,
-          brief:              order.brief           ?? null,
-          objectives:         order.objectives      ?? null,
-          required_access:    order.required_access ?? null,
-          price:              order.price,
-          cost:               order.cost            ?? 0,
-          sale_price:         order.sale_price      ?? order.price,
-          actual_sale_price:  order.actual_sale_price ?? order.price,
-          internal_cost:      order.internal_cost   ?? order.cost ?? 0,
-          profit:             order.profit          ?? 0,
-          monthly_price:      order.monthly_price   ?? null,
-          commitment_months:  order.commitment_months ?? null,
-          contract_total:     order.contract_total  ?? null,
-          status:             'pending',
-          payment_status:     'unpaid',
-          whatsapp_group:     data.whatsappGroup    ?? null,
-          domain_name:        data.domainName       ?? null,
-          specific_request:   data.specificRequest  ?? null,
-          public_token:       order.public_token    ?? crypto.randomUUID(),
-          public_tracking_enabled: true,
-        })
-        if (sbError) console.error('Supabase insert error:', sbError.message)
       }
     } catch (e) {
       console.error('Supabase order insert failed:', e)
@@ -626,65 +679,97 @@ export default function CommanderPage() {
               </div>
             )}
 
-            {/* ── STEP 2: Service ── */}
+            {/* ── STEP 2: Services (multi-lignes) ── */}
             {current === 2 && (
               <div className="space-y-6">
-                <StepHeader icon={Briefcase} color="#4A7DC4" title="Sélection du service"
-                  subtitle="Choisissez le service à commander pour ce client." />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {SERVICES.map((svc) => {
-                    const Icon   = svc.icon
-                    const active = data.serviceId === svc.id
-                    return (
-                      <button key={svc.id} onClick={() => setData(d => ({ ...d, serviceId: svc.id }))}
-                        className={cn(
-                          'relative text-left rounded-xl border-l-4 border p-4 transition-all duration-200 group',
-                          active ? 'bg-[#EFF6FF] border-l-[#6AAEE5] border-[#6AAEE5]/40'
-                                 : 'bg-white border-l-transparent border-[#E2E8F2] hover:border-[#6AAEE5]/25 hover:bg-[#FAFBFD]'
-                        )}
-                        style={{ borderLeftColor: active ? svc.iconColor : svc.iconColor }}
-                      >
-                        {svc.popular && !active && (
-                          <span className="absolute top-3 right-3 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#6AAEE5]/10 text-[#6AAEE5] border border-[#6AAEE5]/30">
-                            Populaire
-                          </span>
-                        )}
-                        {active && (
-                          <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-[#6AAEE5] flex items-center justify-center">
-                            <Check className="w-3 h-3 text-white" strokeWidth={2.5} />
-                          </div>
-                        )}
-                        <div className="flex items-start gap-3">
-                          <div className="flex items-center justify-center w-12 h-12 rounded-lg flex-shrink-0 mt-0.5"
-                            style={{ background: `${svc.iconColor}18` }}>
-                            <Icon className="w-5 h-5" style={{ color: svc.iconColor }} strokeWidth={1.75} />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <p className={cn('text-[13px] font-semibold', active ? 'text-[#2d2d60]' : 'text-[#6B7280] group-hover:text-[#2d2d60]')}>
-                                {svc.name}
-                              </p>
-                              <p className="text-[14px] font-bold" style={{ color: svc.iconColor }}>
-                                {formatPrice(svc.salePrice)}{svc.type === 'subscription' ? '/mois' : ''}
-                              </p>
+                <StepHeader icon={Briefcase} color="#4A7DC4" title="Services commandés"
+                  subtitle="Sélectionnez un ou plusieurs services. Vous pouvez saisir la quantité et le prix réel facturé pour chaque ligne." />
+
+                {/* Catalogue visuel — un clic ajoute le service comme ligne */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] mb-2">
+                    Catalogue · Cliquez pour ajouter
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {SERVICES.map((svc) => {
+                      const Icon = svc.icon
+                      const count = lines.filter(l => l.serviceSlug === svc.id).length
+                      const added = count > 0
+                      return (
+                        <button
+                          key={svc.id}
+                          type="button"
+                          onClick={() => addServiceAsLine(svc.id)}
+                          className={cn(
+                            'relative text-left rounded-xl border-l-4 border p-4 transition-all duration-200 group',
+                            added
+                              ? 'bg-[#EFF6FF] border-l-[#6AAEE5] border-[#6AAEE5]/40'
+                              : 'bg-white border-l-transparent border-[#E2E8F2] hover:border-[#6AAEE5]/25 hover:bg-[#FAFBFD]'
+                          )}
+                          style={{ borderLeftColor: svc.iconColor }}
+                        >
+                          {svc.popular && !added && (
+                            <span className="absolute top-3 right-3 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#6AAEE5]/10 text-[#6AAEE5] border border-[#6AAEE5]/30">
+                              Populaire
+                            </span>
+                          )}
+                          {added && (
+                            <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#6AAEE5] text-white text-[10px] font-bold">
+                              <Check className="w-3 h-3" strokeWidth={3} />
+                              {count > 1 ? `×${count}` : 'Ajouté'}
                             </div>
-                            <p className="text-[11px] text-[#6B7280] leading-relaxed">{svc.description}</p>
-                            {svc.engagement && (
-                              <span className="inline-flex items-center mt-2 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30">
-                                Engagement {svc.engagement}
-                              </span>
-                            )}
+                          )}
+                          <div className="flex items-start gap-3">
+                            <div className="flex items-center justify-center w-12 h-12 rounded-lg flex-shrink-0 mt-0.5"
+                              style={{ background: `${svc.iconColor}18` }}>
+                              <Icon className="w-5 h-5" style={{ color: svc.iconColor }} strokeWidth={1.75} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className={cn('text-[13px] font-semibold', added ? 'text-[#2d2d60]' : 'text-[#6B7280] group-hover:text-[#2d2d60]')}>
+                                  {svc.name}
+                                </p>
+                                <p className="text-[14px] font-bold" style={{ color: svc.iconColor }}>
+                                  {formatPrice(svc.salePrice)}{svc.type === 'subscription' ? '/mois' : ''}
+                                </p>
+                              </div>
+                              <p className="text-[11px] text-[#6B7280] leading-relaxed">{svc.description}</p>
+                              {svc.engagement && (
+                                <span className="inline-flex items-center mt-2 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30">
+                                  Engagement {svc.engagement}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    )
-                  })}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
+
+                {/* Éditeur de lignes : quantité + prix réel par service */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] mb-2">
+                    Lignes de commande · Ajustez quantité et prix réel
+                  </p>
+                  <ServiceLinesEditor lines={lines} onChange={setLines} />
+                </div>
+
                 <NavButtons
-                  onNext={() => { if (data.serviceId) go(1) }}
+                  onNext={() => {
+                    if (linesValidation.ok && lines.length > 0) {
+                      // Sync serviceId avec la 1ère ligne pour compat avec les champs conditionnels
+                      setData(d => ({ ...d, serviceId: lines[0].serviceSlug }))
+                      go(1)
+                    }
+                  }}
                   onPrev={() => go(-1)}
-                  nextDisabled={!data.serviceId}
-                  nextLabel={data.serviceId ? `Choisir — ${selectedService?.name}` : 'Sélectionnez un service'}
+                  nextDisabled={!linesValidation.ok || lines.length === 0}
+                  nextLabel={
+                    lines.length === 0
+                      ? 'Ajoutez au moins un service'
+                      : `Continuer — ${formatPrice(linesTotals.real)}`
+                  }
                 />
               </div>
             )}
@@ -1007,130 +1092,50 @@ Accès hébergement / CMS : .....`}
             {current === 5 && (
               <div className="space-y-6">
                 <StepHeader icon={CreditCard} color="#22C55E" title="Mode de paiement"
-                  subtitle="Choisissez comment régler cette commande." />
-                {selectedService && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <PaymentCard mode="one-shot" selected={data.paymentMode === 'one-shot'}
-                      onSelect={() => setData(d => ({ ...d, paymentMode: 'one-shot' }))}
-                      icon={Zap} title="Paiement unique"
-                      description="Réglez la totalité en une fois. Accès immédiat dès confirmation."
-                      price={formatPrice(selectedService.salePrice)} badge="Ponctuel" badgeColor="#6AAEE5" />
-                    <PaymentCard mode="subscription" selected={data.paymentMode === 'subscription'}
-                      onSelect={() => setData(d => ({ ...d, paymentMode: 'subscription' }))}
-                      icon={CreditCard} title="Abonnement mensuel"
-                      description="Étalez le paiement mois par mois. Résiliable à tout moment."
-                      price={selectedService.monthlyPrice ? `${formatPrice(selectedService.monthlyPrice)}/mois` : `${formatPrice(Math.ceil(selectedService.salePrice / 3))}/mois`}
-                      badge="Récurrent" badgeColor="#22C55E" />
-                  </div>
-                )}
+                  subtitle="Choisissez comment régler cette commande. Les prix ont déjà été définis ligne par ligne." />
 
-                {/* ── Prix réel de vente ── */}
-                {selectedService && (
-                  <div className="rounded-2xl bg-white border border-[#E2E8F2] p-5 shadow-[0_1px_3px_rgba(45,45,96,0.06)] space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Euro className="w-4 h-4 text-[#6AAEE5]" />
-                      <h3 className="text-[13px] font-bold text-[#2d2d60] uppercase tracking-wider">Prix facturé au client</h3>
+                {/* Rappel : total de la commande */}
+                <div className="rounded-2xl bg-gradient-to-br from-[#F8FAFC] to-white border border-[#E2E8F2] p-5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] mb-3">
+                    Montant à régler · {lines.length} ligne{lines.length > 1 ? 's' : ''}
+                  </p>
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className="text-[28px] font-bold text-[#2d2d60] font-mono tabular-nums leading-none">
+                        {formatPrice(linesTotals.real)}
+                      </p>
+                      <p className="text-[11px] text-[#9CA3AF] mt-1">
+                        Bénéfice réel : <span className="font-semibold text-[#22C55E]">{formatPrice(linesTotals.profit)}</span>
+                      </p>
                     </div>
-                    <p className="text-[12px] text-[#6B7280]">
-                      Le prix conseillé est de <strong>{formatPrice(selectedService.salePrice)}</strong>. Vous pouvez l&apos;ajuster si vous avez vendu à un autre prix, et définir la quantité commandée.
-                    </p>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {/* Quantité */}
-                      <div className="rounded-xl bg-[rgba(139,92,246,0.06)] border border-[#8B5CF6]/30 px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1">Quantité *</p>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={quantity}
-                          onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))}
-                          className="w-full bg-transparent outline-none text-[16px] font-bold text-[#2d2d60] font-mono"
-                        />
+                    {Math.abs(linesTotals.variance) >= 0.5 && (
+                      <div
+                        className="flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold"
+                        style={{
+                          background: linesTotals.variance > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+                          color: linesTotals.variance > 0 ? '#EF4444' : '#22C55E',
+                        }}
+                      >
+                        {linesTotals.variance > 0 ? '−' : '+'}{formatPrice(Math.abs(linesTotals.variance))} vs conseil
                       </div>
-
-                      {/* Prix conseillé (unitaire) */}
-                      <div className="rounded-xl bg-[#F5F7FA] border border-[#E2E8F2] px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1">Prix conseillé</p>
-                        <p className="text-[16px] font-bold text-[#2d2d60] font-mono">{formatPrice(selectedService.salePrice)}</p>
-                      </div>
-
-                      {/* Prix réel (editable, unitaire) */}
-                      <div className="rounded-xl bg-[rgba(106,174,229,0.06)] border border-[#6AAEE5]/30 px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6AAEE5] mb-1">Prix réel *</p>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[14px] font-bold text-[#2d2d60]">€</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={actualSalePrice ?? ''}
-                            onChange={e => setActualSalePrice(e.target.value === '' ? null : Number(e.target.value))}
-                            className="w-full bg-transparent outline-none text-[16px] font-bold text-[#2d2d60] font-mono"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Marge réelle totale */}
-                      {(() => {
-                        const realPrice = actualSalePrice ?? selectedService.salePrice
-                        const margin = (realPrice - selectedService.internalCost) * quantity
-                        const marginColor = margin >= 0 ? '#22C55E' : '#EF4444'
-                        return (
-                          <div className="rounded-xl bg-white border px-4 py-3" style={{ borderColor: `${marginColor}30`, background: `${marginColor}08` }}>
-                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: marginColor }}>Marge totale</p>
-                            <p className="text-[16px] font-bold font-mono" style={{ color: marginColor }}>{formatPrice(margin)}</p>
-                          </div>
-                        )
-                      })()}
-                    </div>
-
-                    {/* Totaux */}
-                    {(() => {
-                      const realPrice = actualSalePrice ?? selectedService.salePrice
-                      const theoTotal = selectedService.salePrice * quantity
-                      const realTotal = realPrice * quantity
-                      const costTotal = selectedService.internalCost * quantity
-                      return (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[12px]">
-                          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#F5F7FA]">
-                            <span className="text-[#6B7280]">CA théorique ({quantity}×)</span>
-                            <span className="font-bold text-[#2d2d60] font-mono">{formatPrice(theoTotal)}</span>
-                          </div>
-                          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[rgba(106,174,229,0.06)]">
-                            <span className="text-[#6AAEE5]">CA réel ({quantity}×)</span>
-                            <span className="font-bold text-[#2d2d60] font-mono">{formatPrice(realTotal)}</span>
-                          </div>
-                          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[rgba(239,68,68,0.06)]">
-                            <span className="text-[#EF4444]">Coût total ({quantity}×)</span>
-                            <span className="font-bold text-[#2d2d60] font-mono">{formatPrice(costTotal)}</span>
-                          </div>
-                        </div>
-                      )
-                    })()}
-
-                    {/* Écart si différent du conseillé */}
-                    {actualSalePrice !== null && actualSalePrice !== selectedService.salePrice && (() => {
-                      const gap = (selectedService.salePrice - actualSalePrice) * quantity
-                      const isUnder = gap > 0
-                      return (
-                        <div
-                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-medium"
-                          style={{
-                            background: isUnder ? 'rgba(245,158,11,0.08)' : 'rgba(34,197,94,0.08)',
-                            color: isUnder ? '#F59E0B' : '#22C55E',
-                          }}
-                        >
-                          {isUnder ? '⚠️' : '✓'}
-                          {isUnder
-                            ? `Vous vendez ${formatPrice(Math.abs(gap))} sous le prix conseillé (total).`
-                            : `Vous vendez ${formatPrice(Math.abs(gap))} au-dessus du prix conseillé (total).`
-                          }
-                        </div>
-                      )
-                    })()}
+                    )}
                   </div>
-                )}
+                </div>
+
+                {/* Modes de paiement */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <PaymentCard mode="one-shot" selected={data.paymentMode === 'one-shot'}
+                    onSelect={() => setData(d => ({ ...d, paymentMode: 'one-shot' }))}
+                    icon={Zap} title="Paiement unique"
+                    description="Réglez la totalité en une fois. Accès immédiat dès confirmation."
+                    price={formatPrice(linesTotals.real)} badge="Ponctuel" badgeColor="#6AAEE5" />
+                  <PaymentCard mode="subscription" selected={data.paymentMode === 'subscription'}
+                    onSelect={() => setData(d => ({ ...d, paymentMode: 'subscription' }))}
+                    icon={CreditCard} title="Abonnement mensuel"
+                    description="Étalez le paiement mois par mois. Résiliable à tout moment."
+                    price={`${formatPrice(Math.ceil(linesTotals.real / 3))}/mois`}
+                    badge="Récurrent" badgeColor="#22C55E" />
+                </div>
 
                 <NavButtons
                   onNext={() => { if (data.paymentMode) go(1) }}
@@ -1178,17 +1183,49 @@ Accès hébergement / CMS : .....`}
 
                   <div className="h-px bg-[#E2E8F2] my-2" />
 
-                  {/* Service */}
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">Service</p>
-                  <SummaryRow label="Service"  value={selectedService?.name ?? '—'} />
+                  {/* Services : détail par ligne */}
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">
+                    Services · {lines.length} ligne{lines.length > 1 ? 's' : ''}
+                  </p>
+                  <div className="space-y-2 mb-2">
+                    {lines.map((line, i) => {
+                      const lineTotal = line.unitActualPrice * line.quantity
+                      const lineGap = (line.unitRecommendedPrice - line.unitActualPrice) * line.quantity
+                      return (
+                        <div key={line.id} className="rounded-lg bg-[#F8FAFC] border border-[#E2E8F2] px-3 py-2">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="text-[12px] font-semibold text-[#2d2d60] truncate">
+                              {i + 1}. {line.serviceName}
+                            </p>
+                            <p className="text-[13px] font-bold text-[#2d2d60] font-mono tabular-nums">
+                              {formatPrice(lineTotal)}
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-[#9CA3AF]">
+                            <span>
+                              {formatPrice(line.unitActualPrice)} × {line.quantity}
+                              {Math.abs(lineGap) >= 0.5 && (
+                                <span
+                                  className="ml-2 font-semibold"
+                                  style={{ color: lineGap > 0 ? '#EF4444' : '#22C55E' }}
+                                >
+                                  ({lineGap > 0 ? '−' : '+'}{formatPrice(Math.abs(lineGap))})
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[#9CA3AF]">
+                              coût {formatPrice(line.unitCost * line.quantity)}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                   <SummaryRow label="Paiement" value={data.paymentMode === 'subscription' ? 'Abonnement mensuel' : 'Paiement unique'} />
-                  <SummaryRow label="Quantité" value={String(quantity)} />
-                  <SummaryRow label="Prix conseillé (unité)" value={formatPrice(selectedService?.salePrice ?? 0)} />
-                  <SummaryRow label="Prix réel (unité)"
-                    value={formatPrice(actualSalePrice ?? selectedService?.salePrice ?? 0)} />
-                  <SummaryRow label="Total facturé"
-                    value={formatPrice((actualSalePrice ?? selectedService?.salePrice ?? 0) * quantity)}
-                    highlight />
+                  <SummaryRow label="CA théorique total" value={formatPrice(linesTotals.theoretical)} />
+                  <SummaryRow label="Coût total" value={formatPrice(linesTotals.cost)} />
+                  <SummaryRow label="Bénéfice réel" value={formatPrice(linesTotals.profit)} />
+                  <SummaryRow label="Total facturé" value={formatPrice(linesTotals.real)} highlight />
 
                   {/* Brief */}
                   {data.brief && (
