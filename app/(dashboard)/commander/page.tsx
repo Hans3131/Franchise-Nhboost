@@ -448,13 +448,24 @@ export default function CommanderPage() {
       link:    '/commandes',
     })
 
-    // ── Redirection Stripe Checkout (paiement unique) ──────
-    // Si la commande est bien persistée en DB, on crée une session Stripe
-    // et on redirige le franchisé. Le webhook mettra payment_status à 'paid'
-    // après confirmation du paiement.
+    // ── Redirection Stripe Checkout (auto one-shot vs subscription) ──
+    // Règles :
+    //   - Toutes les lignes récurrentes → mode 'subscription' avec 14j d'essai
+    //   - Toutes les lignes ponctuelles → mode 'payment'
+    //   - Mixte → pour l'instant, on bascule sur 'subscription' et les lignes
+    //     one-shot seront ignorées (à gérer dans un round futur)
     if (supabaseOrderId) {
+      // Détecte le type dominant depuis le catalogue local
+      const hasSubscription = lines.some((line) => {
+        const svc = SERVICES.find((s) => s.id === line.serviceSlug)
+        return svc?.type === 'subscription'
+      })
+      const endpoint = hasSubscription
+        ? '/api/payments/checkout-subscription'
+        : '/api/payments/checkout-one-shot'
+
       try {
-        const checkoutRes = await fetch('/api/payments/checkout-one-shot', {
+        const checkoutRes = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ order_id: supabaseOrderId }),
@@ -465,7 +476,7 @@ export default function CommanderPage() {
           window.location.href = checkoutData.url
           return
         } else {
-          console.warn('[Stripe] checkout failed:', checkoutData.error)
+          console.warn(`[Stripe] ${endpoint} failed:`, checkoutData.error)
           // On tombe dans le fallback ci-dessous (écran de confirmation sans paiement)
         }
       } catch (e) {

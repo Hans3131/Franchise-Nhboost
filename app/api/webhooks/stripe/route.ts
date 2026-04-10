@@ -14,11 +14,84 @@
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe/client'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+// ─── Helper : upsert d'une ligne dans public.subscriptions ───
+async function upsertSubscriptionRow(
+  svc: SupabaseClient,
+  subscription: Stripe.Subscription,
+  ctx: { userId: string | null; orderId: string | null },
+): Promise<void> {
+  const firstItem = subscription.items.data[0]
+  const price = firstItem?.price
+  const product = price?.product
+
+  // Extract service name/slug from product metadata (fallback: product name)
+  let serviceName: string | null = null
+  let serviceSlug: string | null = null
+  if (typeof product === 'object' && product !== null && 'name' in product) {
+    serviceName = (product as Stripe.Product).name ?? null
+    serviceSlug = (product as Stripe.Product).metadata?.service_slug ?? null
+  }
+
+  // Helper pour lire un champ optionnel sur le sub Stripe
+  const sub = subscription as Stripe.Subscription & {
+    current_period_start?: number
+    current_period_end?: number
+  }
+
+  const row = {
+    user_id: ctx.userId,
+    order_id: ctx.orderId,
+    stripe_subscription_id: subscription.id,
+    stripe_customer_id:
+      typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
+    stripe_price_id: price?.id ?? null,
+    service_slug: serviceSlug,
+    service_name: serviceName,
+    status: subscription.status,
+    current_period_start: sub.current_period_start
+      ? new Date(sub.current_period_start * 1000).toISOString()
+      : null,
+    current_period_end: sub.current_period_end
+      ? new Date(sub.current_period_end * 1000).toISOString()
+      : null,
+    trial_start: subscription.trial_start
+      ? new Date(subscription.trial_start * 1000).toISOString()
+      : null,
+    trial_end: subscription.trial_end
+      ? new Date(subscription.trial_end * 1000).toISOString()
+      : null,
+    cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+    canceled_at: subscription.canceled_at
+      ? new Date(subscription.canceled_at * 1000).toISOString()
+      : null,
+    amount: price?.unit_amount != null ? price.unit_amount / 100 : null,
+    currency: subscription.currency ?? 'eur',
+    billing_interval: price?.recurring?.interval ?? null,
+  }
+
+  // user_id est NOT NULL : si absent on skip
+  if (!row.user_id) {
+    console.warn(
+      `[upsertSubscriptionRow] user_id manquant pour sub ${subscription.id}, skip`,
+    )
+    return
+  }
+
+  const { error } = await svc
+    .from('subscriptions')
+    .upsert(row, { onConflict: 'stripe_subscription_id' })
+
+  if (error) {
+    console.error(`[upsertSubscriptionRow] error:`, error.message)
+    throw error
+  }
+}
 
 export async function POST(req: Request) {
   // ─── 1. Vérification de la signature ───────────────────
@@ -83,37 +156,214 @@ export async function POST(req: Request) {
           break
         }
 
-        // On ne gère que le mode payment pour l'instant
-        if (session.mode !== 'payment') {
+        // ─── Mode PAYMENT (one-shot) ──────────────────
+        if (session.mode === 'payment') {
+          const paymentIntentId =
+            typeof session.payment_intent === 'string' ? session.payment_intent : null
+
+          const { error } = await svc
+            .from('orders')
+            .update({
+              payment_status: 'paid',
+              stripe_session_id: session.id,
+              stripe_payment_intent_id: paymentIntentId,
+              paid_at: new Date().toISOString(),
+              amount_paid: session.amount_total != null ? session.amount_total / 100 : null,
+              currency: session.currency ?? 'eur',
+              billing_type: 'one_shot',
+            })
+            .eq('id', orderId)
+
+          if (error) {
+            console.error(
+              `[stripe webhook] update order ${orderId} error:`,
+              error.message,
+            )
+            throw error
+          }
+          console.log(`[stripe webhook] ✓ order ${orderId} → paid`)
+          break
+        }
+
+        // ─── Mode SUBSCRIPTION ───────────────────────
+        if (session.mode === 'subscription') {
+          const subscriptionId =
+            typeof session.subscription === 'string' ? session.subscription : null
+          const customerId =
+            typeof session.customer === 'string' ? session.customer : null
+
+          if (!subscriptionId || !customerId) {
+            console.warn('[stripe webhook] subscription session sans subscription/customer id')
+            break
+          }
+
+          // Récupère l'abonnement complet (status, trial, period, items)
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+            expand: ['items.data.price.product'],
+          })
+
+          // Upsert dans la table subscriptions
+          await upsertSubscriptionRow(svc, subscription, {
+            userId: session.metadata?.user_id ?? null,
+            orderId,
+          })
+
+          // Met à jour la commande
+          const paymentStatus =
+            subscription.status === 'trialing'
+              ? 'trialing'
+              : subscription.status === 'active'
+                ? 'active'
+                : subscription.status === 'past_due'
+                  ? 'past_due'
+                  : 'processing'
+
+          await svc
+            .from('orders')
+            .update({
+              payment_status: paymentStatus,
+              stripe_session_id: session.id,
+              stripe_subscription_id: subscriptionId,
+              billing_type: 'subscription',
+              trial_end: subscription.trial_end
+                ? new Date(subscription.trial_end * 1000).toISOString()
+                : null,
+              currency: subscription.currency ?? 'eur',
+              amount_paid:
+                subscription.items.data[0]?.price?.unit_amount != null
+                  ? subscription.items.data[0].price.unit_amount / 100
+                  : null,
+            })
+            .eq('id', orderId)
+
+          // Enregistre le customer_id sur le profile si pas déjà fait
+          if (session.metadata?.user_id) {
+            await svc
+              .from('profiles')
+              .update({ stripe_customer_id: customerId })
+              .eq('id', session.metadata.user_id)
+              .is('stripe_customer_id', null)
+          }
+
           console.log(
-            `[stripe webhook] session ${session.id} mode=${session.mode}, skip (round suivant)`,
+            `[stripe webhook] ✓ subscription ${subscriptionId} créée (status=${subscription.status})`,
           )
           break
         }
 
-        const paymentIntentId =
-          typeof session.payment_intent === 'string' ? session.payment_intent : null
+        console.log(
+          `[stripe webhook] checkout.session.completed mode=${session.mode} ignoré`,
+        )
+        break
+      }
 
-        const { error } = await svc
-          .from('orders')
-          .update({
-            payment_status: 'paid',
-            stripe_session_id: session.id,
-            stripe_payment_intent_id: paymentIntentId,
-            paid_at: new Date().toISOString(),
-            amount_paid: session.amount_total != null ? session.amount_total / 100 : null,
-            currency: session.currency ?? 'eur',
-          })
-          .eq('id', orderId)
+      // ─── Subscription lifecycle ─────────────────────
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as Stripe.Subscription
+        await upsertSubscriptionRow(svc, subscription, {
+          userId: subscription.metadata?.user_id ?? null,
+          orderId: subscription.metadata?.order_id ?? null,
+        })
 
-        if (error) {
-          console.error(
-            `[stripe webhook] update order ${orderId} error:`,
-            error.message,
-          )
-          throw error
+        // Sync le payment_status de la commande si on a l'order_id
+        const orderId = subscription.metadata?.order_id
+        if (orderId) {
+          const paymentStatus =
+            subscription.status === 'trialing'
+              ? 'trialing'
+              : subscription.status === 'active'
+                ? 'active'
+                : subscription.status === 'past_due'
+                  ? 'past_due'
+                  : subscription.status === 'canceled'
+                    ? 'canceled'
+                    : 'processing'
+
+          await svc
+            .from('orders')
+            .update({
+              payment_status: paymentStatus,
+              stripe_subscription_id: subscription.id,
+              trial_end: subscription.trial_end
+                ? new Date(subscription.trial_end * 1000).toISOString()
+                : null,
+            })
+            .eq('id', orderId)
         }
-        console.log(`[stripe webhook] ✓ order ${orderId} → paid`)
+        console.log(
+          `[stripe webhook] ✓ subscription ${subscription.id} synced (${subscription.status})`,
+        )
+        break
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription
+        await svc
+          .from('subscriptions')
+          .update({
+            status: 'canceled',
+            canceled_at: new Date().toISOString(),
+          })
+          .eq('stripe_subscription_id', subscription.id)
+
+        // Met à jour la commande liée
+        const orderId = subscription.metadata?.order_id
+        if (orderId) {
+          await svc
+            .from('orders')
+            .update({ payment_status: 'canceled' })
+            .eq('id', orderId)
+        }
+        console.log(`[stripe webhook] ✓ subscription ${subscription.id} → canceled`)
+        break
+      }
+
+      case 'invoice.paid': {
+        const invoice = event.data.object as Stripe.Invoice
+        const subId =
+          typeof (invoice as unknown as { subscription?: unknown }).subscription === 'string'
+            ? ((invoice as unknown as { subscription: string }).subscription)
+            : null
+        if (subId) {
+          // Récupère la subscription pour sync les nouvelles dates
+          const subscription = await stripe.subscriptions.retrieve(subId)
+          await upsertSubscriptionRow(svc, subscription, {
+            userId: subscription.metadata?.user_id ?? null,
+            orderId: subscription.metadata?.order_id ?? null,
+          })
+          console.log(`[stripe webhook] ✓ invoice paid → sub ${subId} renewed`)
+        }
+        break
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        const subId =
+          typeof (invoice as unknown as { subscription?: unknown }).subscription === 'string'
+            ? ((invoice as unknown as { subscription: string }).subscription)
+            : null
+        if (subId) {
+          await svc
+            .from('subscriptions')
+            .update({ status: 'past_due' })
+            .eq('stripe_subscription_id', subId)
+
+          // Trouve la commande liée
+          const { data: subRow } = await svc
+            .from('subscriptions')
+            .select('order_id')
+            .eq('stripe_subscription_id', subId)
+            .maybeSingle()
+
+          if (subRow?.order_id) {
+            await svc
+              .from('orders')
+              .update({ payment_status: 'past_due' })
+              .eq('id', subRow.order_id)
+          }
+          console.log(`[stripe webhook] ⚠ invoice failed → sub ${subId} past_due`)
+        }
         break
       }
 
