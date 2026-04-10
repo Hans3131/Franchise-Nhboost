@@ -66,18 +66,37 @@ export async function getById(id: string): Promise<Client | null> {
 export async function insert(
   client: Omit<Client, 'id' | 'user_id' | 'created_at' | 'updated_at'>
 ): Promise<Client> {
+  // Nettoyage : enlève les champs qui ne sont pas dans la table clients
+  // (sécurité : si une colonne n'existe pas encore en DB, l'insert échouera sinon)
+  const payload: Record<string, unknown> = { ...client }
+  // Convertit les strings vides en null pour les colonnes optionnelles
+  for (const key of Object.keys(payload)) {
+    if (payload[key] === '') payload[key] = null
+  }
+
   try {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data, error } = await supabase
         .from('clients')
-        .insert({ ...client, user_id: user.id })
+        .insert({ ...payload, user_id: user.id })
         .select()
         .single()
-      if (!error && data) return data as Client
+      if (error) {
+        console.error('[clientStore.insert] Supabase error:', error.message, error.details, error.hint)
+        // Si c'est une colonne manquante, on le signale clairement
+        if (error.message.includes('column') && error.message.includes('does not exist')) {
+          console.warn('[clientStore.insert] Migration manquante — exécute supabase/migrations/clients_pipeline_fields.sql')
+        }
+      } else if (data) {
+        return data as Client
+      }
     }
-  } catch {}
+  } catch (e) {
+    console.error('[clientStore.insert] exception:', e)
+  }
+
   // Fallback localStorage
   const now = new Date().toISOString()
   const newClient: Client = {
