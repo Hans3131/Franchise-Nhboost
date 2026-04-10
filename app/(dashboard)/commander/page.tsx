@@ -179,6 +179,7 @@ export default function CommanderPage() {
   const [submitting, setSubmitting] = useState(false)
   const [newOrderRef, setNewOrderRef] = useState('')
   const [actualSalePrice, setActualSalePrice] = useState<number | null>(null)
+  const [quantity, setQuantity] = useState<number>(1)
 
   const selectedService = SERVICES.find(s => s.id === data.serviceId)
 
@@ -219,8 +220,14 @@ export default function CommanderPage() {
   const handleSubmitOrder = async () => {
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 400))
+    const qty = Math.max(1, quantity)
+    const unitActual = actualSalePrice ?? selectedService?.salePrice ?? 0
+    const unitCost = selectedService?.internalCost ?? 0
+    const unitRecommended = selectedService?.salePrice ?? 0
     const order = storeInsert({
       service:         selectedService?.name ?? '',
+      service_slug:    selectedService?.id ?? undefined,
+      quantity:        qty,
       client_name:     data.clientName    ?? '',
       client_email:    data.clientEmail   ?? '',
       client_phone:    data.clientPhone,
@@ -235,16 +242,16 @@ export default function CommanderPage() {
       brief:           data.brief,
       objectives:      data.objectives,
       required_access: data.requiredAccess,
-      price:              actualSalePrice ?? selectedService?.salePrice ?? 0,
-      cost:               selectedService?.internalCost ?? 0,
-      sale_price:         selectedService?.salePrice ?? 0,
-      actual_sale_price:  actualSalePrice ?? selectedService?.salePrice ?? 0,
-      internal_cost:      selectedService?.internalCost ?? 0,
-      profit:             (actualSalePrice ?? selectedService?.salePrice ?? 0) - (selectedService?.internalCost ?? 0),
+      price:              unitActual * qty,
+      cost:               unitCost * qty,
+      sale_price:         unitRecommended,
+      actual_sale_price:  unitActual,
+      internal_cost:      unitCost,
+      profit:             (unitActual - unitCost) * qty,
       monthly_price:      selectedService?.monthlyPrice ?? undefined,
       commitment_months:  selectedService?.commitmentMonths ?? undefined,
       contract_total:     selectedService?.commitmentMonths
-        ? (selectedService.salePrice) * selectedService.commitmentMonths
+        ? unitRecommended * selectedService.commitmentMonths * qty
         : undefined,
       status:             'pending',
       payment_status:     'unpaid',
@@ -317,9 +324,21 @@ export default function CommanderPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        // Résoudre service_id depuis le slug (table services)
+        let resolvedServiceId: string | null = null
+        if (order.service_slug) {
+          const { data: svc } = await supabase
+            .from('services')
+            .select('id')
+            .eq('slug', order.service_slug)
+            .maybeSingle()
+          resolvedServiceId = svc?.id ?? null
+        }
         const { error: sbError } = await supabase.from('orders').insert({
           user_id:            user.id,
           service:            order.service,
+          service_id:         resolvedServiceId,
+          quantity:           order.quantity ?? 1,
           client_name:        order.client_name,
           client_email:       order.client_email,
           client_phone:       order.client_phone    ?? null,
@@ -1013,19 +1032,32 @@ Accès hébergement / CMS : .....`}
                       <h3 className="text-[13px] font-bold text-[#2d2d60] uppercase tracking-wider">Prix facturé au client</h3>
                     </div>
                     <p className="text-[12px] text-[#6B7280]">
-                      Le prix conseillé est de <strong>{formatPrice(selectedService.salePrice)}</strong>. Vous pouvez l&apos;ajuster si vous avez vendu à un autre prix.
+                      Le prix conseillé est de <strong>{formatPrice(selectedService.salePrice)}</strong>. Vous pouvez l&apos;ajuster si vous avez vendu à un autre prix, et définir la quantité commandée.
                     </p>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {/* Prix conseillé */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {/* Quantité */}
+                      <div className="rounded-xl bg-[rgba(139,92,246,0.06)] border border-[#8B5CF6]/30 px-4 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#8B5CF6] mb-1">Quantité *</p>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={quantity}
+                          onChange={e => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                          className="w-full bg-transparent outline-none text-[16px] font-bold text-[#2d2d60] font-mono"
+                        />
+                      </div>
+
+                      {/* Prix conseillé (unitaire) */}
                       <div className="rounded-xl bg-[#F5F7FA] border border-[#E2E8F2] px-4 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1">Prix conseillé</p>
                         <p className="text-[16px] font-bold text-[#2d2d60] font-mono">{formatPrice(selectedService.salePrice)}</p>
                       </div>
 
-                      {/* Prix réel (editable) */}
+                      {/* Prix réel (editable, unitaire) */}
                       <div className="rounded-xl bg-[rgba(106,174,229,0.06)] border border-[#6AAEE5]/30 px-4 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6AAEE5] mb-1">Prix réel facturé *</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6AAEE5] mb-1">Prix réel *</p>
                         <div className="flex items-center gap-1">
                           <span className="text-[14px] font-bold text-[#2d2d60]">€</span>
                           <input
@@ -1039,23 +1071,47 @@ Accès hébergement / CMS : .....`}
                         </div>
                       </div>
 
-                      {/* Marge réelle */}
+                      {/* Marge réelle totale */}
                       {(() => {
                         const realPrice = actualSalePrice ?? selectedService.salePrice
-                        const margin = realPrice - selectedService.internalCost
+                        const margin = (realPrice - selectedService.internalCost) * quantity
                         const marginColor = margin >= 0 ? '#22C55E' : '#EF4444'
                         return (
                           <div className="rounded-xl bg-white border px-4 py-3" style={{ borderColor: `${marginColor}30`, background: `${marginColor}08` }}>
-                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: marginColor }}>Marge réelle</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: marginColor }}>Marge totale</p>
                             <p className="text-[16px] font-bold font-mono" style={{ color: marginColor }}>{formatPrice(margin)}</p>
                           </div>
                         )
                       })()}
                     </div>
 
+                    {/* Totaux */}
+                    {(() => {
+                      const realPrice = actualSalePrice ?? selectedService.salePrice
+                      const theoTotal = selectedService.salePrice * quantity
+                      const realTotal = realPrice * quantity
+                      const costTotal = selectedService.internalCost * quantity
+                      return (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[12px]">
+                          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#F5F7FA]">
+                            <span className="text-[#6B7280]">CA théorique ({quantity}×)</span>
+                            <span className="font-bold text-[#2d2d60] font-mono">{formatPrice(theoTotal)}</span>
+                          </div>
+                          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[rgba(106,174,229,0.06)]">
+                            <span className="text-[#6AAEE5]">CA réel ({quantity}×)</span>
+                            <span className="font-bold text-[#2d2d60] font-mono">{formatPrice(realTotal)}</span>
+                          </div>
+                          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[rgba(239,68,68,0.06)]">
+                            <span className="text-[#EF4444]">Coût total ({quantity}×)</span>
+                            <span className="font-bold text-[#2d2d60] font-mono">{formatPrice(costTotal)}</span>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     {/* Écart si différent du conseillé */}
                     {actualSalePrice !== null && actualSalePrice !== selectedService.salePrice && (() => {
-                      const gap = selectedService.salePrice - actualSalePrice
+                      const gap = (selectedService.salePrice - actualSalePrice) * quantity
                       const isUnder = gap > 0
                       return (
                         <div
@@ -1067,8 +1123,8 @@ Accès hébergement / CMS : .....`}
                         >
                           {isUnder ? '⚠️' : '✓'}
                           {isUnder
-                            ? `Vous vendez ${formatPrice(Math.abs(gap))} sous le prix conseillé.`
-                            : `Vous vendez ${formatPrice(Math.abs(gap))} au-dessus du prix conseillé.`
+                            ? `Vous vendez ${formatPrice(Math.abs(gap))} sous le prix conseillé (total).`
+                            : `Vous vendez ${formatPrice(Math.abs(gap))} au-dessus du prix conseillé (total).`
                           }
                         </div>
                       )
@@ -1126,9 +1182,12 @@ Accès hébergement / CMS : .....`}
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">Service</p>
                   <SummaryRow label="Service"  value={selectedService?.name ?? '—'} />
                   <SummaryRow label="Paiement" value={data.paymentMode === 'subscription' ? 'Abonnement mensuel' : 'Paiement unique'} />
-                  <SummaryRow label="Prix conseillé" value={formatPrice(selectedService?.salePrice ?? 0)} />
-                  <SummaryRow label="Prix réel facturé"
-                    value={formatPrice(actualSalePrice ?? selectedService?.salePrice ?? 0)}
+                  <SummaryRow label="Quantité" value={String(quantity)} />
+                  <SummaryRow label="Prix conseillé (unité)" value={formatPrice(selectedService?.salePrice ?? 0)} />
+                  <SummaryRow label="Prix réel (unité)"
+                    value={formatPrice(actualSalePrice ?? selectedService?.salePrice ?? 0)} />
+                  <SummaryRow label="Total facturé"
+                    value={formatPrice((actualSalePrice ?? selectedService?.salePrice ?? 0) * quantity)}
                     highlight />
 
                   {/* Brief */}

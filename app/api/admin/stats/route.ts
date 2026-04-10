@@ -19,7 +19,7 @@ export async function GET() {
     const svc = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
     // All orders
-    const { data: orders } = await svc.from('orders').select('user_id, sale_price, actual_sale_price, internal_cost, profit, status, created_at')
+    const { data: orders } = await svc.from('orders').select('user_id, sale_price, actual_sale_price, internal_cost, profit, quantity, status, created_at')
     const { data: leads } = await svc.from('leads').select('user_id, status, created_at')
     const { data: profiles } = await svc.from('profiles').select('id, company_name, role, created_at')
     const { data: clients } = await svc.from('clients').select('user_id, commercial_status')
@@ -32,10 +32,11 @@ export async function GET() {
     const completed = allOrders.filter(o => o.status === 'completed')
     const inProgress = allOrders.filter(o => o.status === 'in_progress')
 
-    // KPIs
-    const theoreticalRevenue = completed.reduce((s, o) => s + Number(o.sale_price ?? 0), 0)
-    const totalRevenue = completed.reduce((s, o) => s + Number(o.actual_sale_price ?? o.sale_price ?? 0), 0)
-    const totalCosts = completed.reduce((s, o) => s + Number(o.internal_cost ?? 0), 0)
+    // KPIs (avec quantité)
+    const qtyOf = (o: { quantity?: number | null }) => Number(o.quantity ?? 1)
+    const theoreticalRevenue = completed.reduce((s, o) => s + Number(o.sale_price ?? 0) * qtyOf(o), 0)
+    const totalRevenue = completed.reduce((s, o) => s + Number(o.actual_sale_price ?? o.sale_price ?? 0) * qtyOf(o), 0)
+    const totalCosts = completed.reduce((s, o) => s + Number(o.internal_cost ?? 0) * qtyOf(o), 0)
     const totalMargin = totalRevenue - totalCosts
     const revenueVariance = theoreticalRevenue - totalRevenue
     const ordersInProgress = inProgress.length
@@ -56,9 +57,10 @@ export async function GET() {
         const p = allProfiles.find(pr => pr.id === o.user_id)
         franchiseCA[o.user_id] = { name: p?.company_name ?? 'Franchise', ca: 0, orders: 0, margin: 0 }
       }
-      franchiseCA[o.user_id].ca += Number(o.actual_sale_price ?? o.sale_price ?? 0)
+      const q = qtyOf(o)
+      franchiseCA[o.user_id].ca += Number(o.actual_sale_price ?? o.sale_price ?? 0) * q
       franchiseCA[o.user_id].orders += 1
-      franchiseCA[o.user_id].margin += Number(o.actual_sale_price ?? o.sale_price ?? 0) - Number(o.internal_cost ?? 0)
+      franchiseCA[o.user_id].margin += (Number(o.actual_sale_price ?? o.sale_price ?? 0) - Number(o.internal_cost ?? 0)) * q
     })
     const topFranchises = Object.values(franchiseCA).sort((a, b) => b.ca - a.ca).slice(0, 5)
 
@@ -77,7 +79,7 @@ export async function GET() {
       const y = d.getFullYear()
       const rev = completed
         .filter(o => { const od = new Date(o.created_at); return od.getMonth() === m && od.getFullYear() === y })
-        .reduce((s, o) => s + Number(o.actual_sale_price ?? o.sale_price ?? 0), 0)
+        .reduce((s, o) => s + Number(o.actual_sale_price ?? o.sale_price ?? 0) * qtyOf(o), 0)
       return { month: d.toLocaleDateString('fr-FR', { month: 'short' }), revenue: rev }
     })
 

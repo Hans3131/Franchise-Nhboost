@@ -20,6 +20,7 @@ interface OrderRow {
   ref: string; service: string; client_name: string
   price: number; cost: number
   sale_price: number; actual_sale_price: number; internal_cost: number; profit: number
+  quantity: number
   status: string; created_at: string
 }
 
@@ -47,7 +48,7 @@ function getMonthlyData(orders: OrderRow[]) {
     const revenue = orders
       .filter(o => o.status === 'completed')
       .filter(o => { const od = new Date(o.created_at); return od.getMonth() === m && od.getFullYear() === y })
-      .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price), 0)
+      .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price) * (o.quantity ?? 1), 0)
     months.push({ key: `${y}-${m}`, label: label.charAt(0).toUpperCase() + label.slice(1), revenue })
   }
   // Current month
@@ -55,7 +56,7 @@ function getMonthlyData(orders: OrderRow[]) {
   const cRev = orders
     .filter(o => o.status === 'completed')
     .filter(o => { const od = new Date(o.created_at); return od.getMonth() === currentMonth && od.getFullYear() === currentYear })
-    .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price ?? o.price), 0)
+    .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price ?? o.price) * (o.quantity ?? 1), 0)
   months.push({
     key: `${currentYear}-${currentMonth}-current`,
     label: cd.toLocaleDateString('fr-FR', { month: 'short' }).replace(/^./, c => c.toUpperCase()),
@@ -138,6 +139,7 @@ export default function DashboardPage() {
         actual_sale_price: o.actual_sale_price ?? o.sale_price ?? o.price,
         internal_cost: o.internal_cost ?? o.cost,
         profit: o.profit ?? (o.price - (o.cost > 0 ? o.cost : Math.round(o.price * 0.64))),
+        quantity: o.quantity ?? 1,
         status: o.status, created_at: o.created_at,
     })))
     setLoading(false)
@@ -166,6 +168,7 @@ export default function DashboardPage() {
               actual_sale_price: Number(r.actual_sale_price ?? r.sale_price ?? r.price ?? 0),
               internal_cost: Number(r.internal_cost ?? r.cost ?? 0),
               profit: Number(r.profit ?? 0),
+              quantity: Number(r.quantity ?? 1),
               status: r.status ?? 'pending', created_at: r.created_at ?? new Date().toISOString(),
             })))
           }
@@ -176,12 +179,12 @@ export default function DashboardPage() {
   // ─── Computed KPIs ─────────────────────────────────────────
   const filtered  = useMemo(() => filterByPeriod(orders, period), [orders, period])
   const completed = useMemo(() => filtered.filter(o => o.status === 'completed'), [filtered])
-  // CA théorique = somme des prix conseillés
-  const theoreticalRevenue = useMemo(() => completed.reduce((s, o) => s + o.sale_price, 0), [completed])
-  // CA réel = somme des prix réellement facturés
-  const revenue   = useMemo(() => completed.reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price), 0), [completed])
-  // Coûts internes NHBoost
-  const costs     = useMemo(() => completed.reduce((s, o) => s + o.internal_cost, 0), [completed])
+  // CA théorique = somme des (prix conseillé × quantité)
+  const theoreticalRevenue = useMemo(() => completed.reduce((s, o) => s + o.sale_price * (o.quantity ?? 1), 0), [completed])
+  // CA réel = somme des (prix réellement facturé × quantité)
+  const revenue   = useMemo(() => completed.reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price) * (o.quantity ?? 1), 0), [completed])
+  // Coûts internes NHBoost × quantité
+  const costs     = useMemo(() => completed.reduce((s, o) => s + o.internal_cost * (o.quantity ?? 1), 0), [completed])
   // Bénéfice réel = CA réel - Coûts
   const profit    = revenue - costs
   // Écart théorique vs réel (positif = vendu sous le conseil)

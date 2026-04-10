@@ -21,6 +21,9 @@ export interface LocalOrder {
   tiktok?:         string
   // Projet
   service:         string
+  service_id?:     string       // UUID du service catalogue (table services)
+  service_slug?:   string       // slug stable (ex: 'site-onepage')
+  quantity?:       number       // quantité commandée (défaut: 1)
   brief?:          string
   objectives?:     string
   required_access?: string
