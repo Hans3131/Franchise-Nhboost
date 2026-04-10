@@ -30,11 +30,12 @@ export interface LocalOrder {
   // Suivi
   public_token?:      string
   // Finance
-  price:              number   // = sale_price (prix de vente franchisé)
+  price:              number   // = actual_sale_price (prix réellement facturé)
   cost:               number   // = internal_cost (coût interne NHBoost)
-  sale_price?:        number
+  sale_price?:        number   // Prix conseillé (théorique, depuis catalogue)
+  actual_sale_price?: number   // Prix réellement facturé par le franchisé
   internal_cost?:     number
-  profit?:            number   // sale_price - internal_cost
+  profit?:            number   // actual_sale_price - internal_cost
   monthly_price?:     number
   commitment_months?: number
   contract_total?:    number

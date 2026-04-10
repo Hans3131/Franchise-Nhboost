@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   Euro, ShoppingCart, TrendingUp, ArrowRight,
   ClipboardList, FolderOpen, HeadphonesIcon, BookOpen,
-  Trophy, CheckCircle2,
+  Trophy, CheckCircle2, Target,
 } from 'lucide-react'
 import Link from 'next/link'
 import KPICard from '@/components/dashboard/KPICard'
@@ -19,7 +19,7 @@ type Period = 'month' | 'year' | 'all'
 interface OrderRow {
   ref: string; service: string; client_name: string
   price: number; cost: number
-  sale_price: number; internal_cost: number; profit: number
+  sale_price: number; actual_sale_price: number; internal_cost: number; profit: number
   status: string; created_at: string
 }
 
@@ -47,7 +47,7 @@ function getMonthlyData(orders: OrderRow[]) {
     const revenue = orders
       .filter(o => o.status === 'completed')
       .filter(o => { const od = new Date(o.created_at); return od.getMonth() === m && od.getFullYear() === y })
-      .reduce((s, o) => s + o.sale_price, 0)
+      .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price), 0)
     months.push({ key: `${y}-${m}`, label: label.charAt(0).toUpperCase() + label.slice(1), revenue })
   }
   // Current month
@@ -55,7 +55,7 @@ function getMonthlyData(orders: OrderRow[]) {
   const cRev = orders
     .filter(o => o.status === 'completed')
     .filter(o => { const od = new Date(o.created_at); return od.getMonth() === currentMonth && od.getFullYear() === currentYear })
-    .reduce((s, o) => s + o.price, 0)
+    .reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price ?? o.price), 0)
   months.push({
     key: `${currentYear}-${currentMonth}-current`,
     label: cd.toLocaleDateString('fr-FR', { month: 'short' }).replace(/^./, c => c.toUpperCase()),
@@ -134,7 +134,9 @@ export default function DashboardPage() {
     setOrders(localOrders.map(o => ({
       ref: o.ref, service: o.service, client_name: o.client_name,
       price: o.price, cost: o.cost ?? 0,
-        sale_price: o.sale_price ?? o.price, internal_cost: o.internal_cost ?? o.cost,
+        sale_price: o.sale_price ?? o.price,
+        actual_sale_price: o.actual_sale_price ?? o.sale_price ?? o.price,
+        internal_cost: o.internal_cost ?? o.cost,
         profit: o.profit ?? (o.price - (o.cost > 0 ? o.cost : Math.round(o.price * 0.64))),
         status: o.status, created_at: o.created_at,
     })))
@@ -161,6 +163,7 @@ export default function DashboardPage() {
               ref: r.ref ?? r.id, service: r.service, client_name: r.client_name ?? '',
               price: Number(r.price ?? 0), cost: Number(r.cost ?? 0),
               sale_price: Number(r.sale_price ?? r.price ?? 0),
+              actual_sale_price: Number(r.actual_sale_price ?? r.sale_price ?? r.price ?? 0),
               internal_cost: Number(r.internal_cost ?? r.cost ?? 0),
               profit: Number(r.profit ?? 0),
               status: r.status ?? 'pending', created_at: r.created_at ?? new Date().toISOString(),
@@ -173,12 +176,16 @@ export default function DashboardPage() {
   // ─── Computed KPIs ─────────────────────────────────────────
   const filtered  = useMemo(() => filterByPeriod(orders, period), [orders, period])
   const completed = useMemo(() => filtered.filter(o => o.status === 'completed'), [filtered])
-  // CA = somme des prix de vente franchisé
-  const revenue   = useMemo(() => completed.reduce((s, o) => s + o.sale_price, 0), [completed])
-  // Coûts = somme des coûts internes NHBoost
+  // CA théorique = somme des prix conseillés
+  const theoreticalRevenue = useMemo(() => completed.reduce((s, o) => s + o.sale_price, 0), [completed])
+  // CA réel = somme des prix réellement facturés
+  const revenue   = useMemo(() => completed.reduce((s, o) => s + (o.actual_sale_price ?? o.sale_price), 0), [completed])
+  // Coûts internes NHBoost
   const costs     = useMemo(() => completed.reduce((s, o) => s + o.internal_cost, 0), [completed])
-  // Bénéfice = CA - Coûts
+  // Bénéfice réel = CA réel - Coûts
   const profit    = revenue - costs
+  // Écart théorique vs réel (positif = vendu sous le conseil)
+  const variance  = theoreticalRevenue - revenue
 
   // ─── Chart data ────────────────────────────────────────────
   const chartData = useMemo(() => getMonthlyData(orders), [orders])
@@ -228,10 +235,13 @@ export default function DashboardPage() {
   const dateLabel = now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
     .replace(/^./, c => c.toUpperCase())
 
+  const periodLabel = PERIOD_OPTS.find(p => p.key === period)!.label
   const KPI_DATA = [
-    { label: "Chiffre d'affaires", value: loading ? '…' : fmt(revenue), delta: PERIOD_OPTS.find(p => p.key === period)!.label, trend: 'up' as const, icon: Euro, iconColor: '#6AAEE5' },
-    { label: 'Coûts commandes',    value: loading ? '…' : fmt(costs),   delta: PERIOD_OPTS.find(p => p.key === period)!.label, trend: 'down' as const, icon: ShoppingCart, iconColor: '#F59E0B' },
-    { label: 'Bénéfices nets',     value: loading ? '…' : fmt(profit),  delta: PERIOD_OPTS.find(p => p.key === period)!.label, trend: profit >= 0 ? 'up' as const : 'down' as const, icon: TrendingUp, iconColor: '#22C55E' },
+    { label: "CA théorique",    value: loading ? '…' : fmt(theoreticalRevenue), delta: periodLabel, trend: 'up' as const,   icon: Target,       iconColor: '#8B5CF6' },
+    { label: "CA réel",         value: loading ? '…' : fmt(revenue),            delta: periodLabel, trend: 'up' as const,   icon: Euro,         iconColor: '#6AAEE5' },
+    { label: 'Coûts totaux',    value: loading ? '…' : fmt(costs),              delta: periodLabel, trend: 'down' as const, icon: ShoppingCart, iconColor: '#F59E0B' },
+    { label: 'Bénéfice réel',   value: loading ? '…' : fmt(profit),             delta: periodLabel, trend: profit >= 0 ? 'up' as const : 'down' as const, icon: TrendingUp, iconColor: '#22C55E' },
+    { label: 'Écart vs conseil', value: loading ? '…' : fmt(variance),           delta: variance > 0 ? 'Sous le conseil' : variance < 0 ? 'Au-dessus' : 'Conforme', trend: variance <= 0 ? 'up' as const : 'down' as const, icon: TrendingUp, iconColor: variance > 0 ? '#EF4444' : '#22C55E' },
   ]
 
   return (
@@ -271,7 +281,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* ── KPI Cards ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {KPI_DATA.map((kpi, i) => (
           <KPICard key={kpi.label} {...kpi} index={i} />
         ))}

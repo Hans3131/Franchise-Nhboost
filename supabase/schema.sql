@@ -66,6 +66,7 @@ create table if not exists public.orders (
                       check (payment_status in ('paid','unpaid','refunded')),
   cost              numeric(10,2) default 0,
   sale_price        numeric(10,2) default 0,
+  actual_sale_price numeric(10,2),
   internal_cost     numeric(10,2) default 0,
   profit            numeric(10,2) default 0,
   monthly_price     numeric(10,2),

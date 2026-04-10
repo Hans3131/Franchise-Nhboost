@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,7 +10,7 @@ import {
   Upload, CreditCard, CheckCircle2, ChevronRight,
   ChevronLeft, Globe, Share2, X, Check, Zap, Loader2,
   Building2, Mail, Phone, Target, Key, Hash, AtSign, Users, Play,
-  MessageSquare,
+  MessageSquare, Euro,
 } from 'lucide-react'
 import { insert as storeInsert } from '@/lib/orderStore'
 import { insert as notifInsert } from '@/lib/notificationStore'
@@ -178,8 +178,16 @@ export default function CommanderPage() {
   const [submitted,  setSubmitted]  = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [newOrderRef, setNewOrderRef] = useState('')
+  const [actualSalePrice, setActualSalePrice] = useState<number | null>(null)
 
   const selectedService = SERVICES.find(s => s.id === data.serviceId)
+
+  // Auto-init actualSalePrice when service changes
+  useEffect(() => {
+    if (selectedService && actualSalePrice === null) {
+      setActualSalePrice(selectedService.salePrice)
+    }
+  }, [selectedService, actualSalePrice])
 
   const form1 = useForm({ resolver: zodResolver(step1Schema), mode: 'onBlur' })
   const form3 = useForm({ resolver: zodResolver(step3Schema), mode: 'onBlur' })
@@ -227,11 +235,12 @@ export default function CommanderPage() {
       brief:           data.brief,
       objectives:      data.objectives,
       required_access: data.requiredAccess,
-      price:              selectedService?.salePrice ?? 0,
+      price:              actualSalePrice ?? selectedService?.salePrice ?? 0,
       cost:               selectedService?.internalCost ?? 0,
       sale_price:         selectedService?.salePrice ?? 0,
+      actual_sale_price:  actualSalePrice ?? selectedService?.salePrice ?? 0,
       internal_cost:      selectedService?.internalCost ?? 0,
-      profit:             (selectedService?.salePrice ?? 0) - (selectedService?.internalCost ?? 0),
+      profit:             (actualSalePrice ?? selectedService?.salePrice ?? 0) - (selectedService?.internalCost ?? 0),
       monthly_price:      selectedService?.monthlyPrice ?? undefined,
       commitment_months:  selectedService?.commitmentMonths ?? undefined,
       contract_total:     selectedService?.commitmentMonths
@@ -328,6 +337,7 @@ export default function CommanderPage() {
           price:              order.price,
           cost:               order.cost            ?? 0,
           sale_price:         order.sale_price      ?? order.price,
+          actual_sale_price:  order.actual_sale_price ?? order.price,
           internal_cost:      order.internal_cost   ?? order.cost ?? 0,
           profit:             order.profit          ?? 0,
           monthly_price:      order.monthly_price   ?? null,
@@ -994,6 +1004,78 @@ Accès hébergement / CMS : .....`}
                       badge="Récurrent" badgeColor="#22C55E" />
                   </div>
                 )}
+
+                {/* ── Prix réel de vente ── */}
+                {selectedService && (
+                  <div className="rounded-2xl bg-white border border-[#E2E8F2] p-5 shadow-[0_1px_3px_rgba(45,45,96,0.06)] space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Euro className="w-4 h-4 text-[#6AAEE5]" />
+                      <h3 className="text-[13px] font-bold text-[#2d2d60] uppercase tracking-wider">Prix facturé au client</h3>
+                    </div>
+                    <p className="text-[12px] text-[#6B7280]">
+                      Le prix conseillé est de <strong>{formatPrice(selectedService.salePrice)}</strong>. Vous pouvez l&apos;ajuster si vous avez vendu à un autre prix.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Prix conseillé */}
+                      <div className="rounded-xl bg-[#F5F7FA] border border-[#E2E8F2] px-4 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1">Prix conseillé</p>
+                        <p className="text-[16px] font-bold text-[#2d2d60] font-mono">{formatPrice(selectedService.salePrice)}</p>
+                      </div>
+
+                      {/* Prix réel (editable) */}
+                      <div className="rounded-xl bg-[rgba(106,174,229,0.06)] border border-[#6AAEE5]/30 px-4 py-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6AAEE5] mb-1">Prix réel facturé *</p>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[14px] font-bold text-[#2d2d60]">€</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={actualSalePrice ?? ''}
+                            onChange={e => setActualSalePrice(e.target.value === '' ? null : Number(e.target.value))}
+                            className="w-full bg-transparent outline-none text-[16px] font-bold text-[#2d2d60] font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Marge réelle */}
+                      {(() => {
+                        const realPrice = actualSalePrice ?? selectedService.salePrice
+                        const margin = realPrice - selectedService.internalCost
+                        const marginColor = margin >= 0 ? '#22C55E' : '#EF4444'
+                        return (
+                          <div className="rounded-xl bg-white border px-4 py-3" style={{ borderColor: `${marginColor}30`, background: `${marginColor}08` }}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: marginColor }}>Marge réelle</p>
+                            <p className="text-[16px] font-bold font-mono" style={{ color: marginColor }}>{formatPrice(margin)}</p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Écart si différent du conseillé */}
+                    {actualSalePrice !== null && actualSalePrice !== selectedService.salePrice && (() => {
+                      const gap = selectedService.salePrice - actualSalePrice
+                      const isUnder = gap > 0
+                      return (
+                        <div
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-medium"
+                          style={{
+                            background: isUnder ? 'rgba(245,158,11,0.08)' : 'rgba(34,197,94,0.08)',
+                            color: isUnder ? '#F59E0B' : '#22C55E',
+                          }}
+                        >
+                          {isUnder ? '⚠️' : '✓'}
+                          {isUnder
+                            ? `Vous vendez ${formatPrice(Math.abs(gap))} sous le prix conseillé.`
+                            : `Vous vendez ${formatPrice(Math.abs(gap))} au-dessus du prix conseillé.`
+                          }
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+
                 <NavButtons
                   onNext={() => { if (data.paymentMode) go(1) }}
                   onPrev={() => go(-1)}
@@ -1044,10 +1126,9 @@ Accès hébergement / CMS : .....`}
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280] pb-1 mb-1">Service</p>
                   <SummaryRow label="Service"  value={selectedService?.name ?? '—'} />
                   <SummaryRow label="Paiement" value={data.paymentMode === 'subscription' ? 'Abonnement mensuel' : 'Paiement unique'} />
-                  <SummaryRow label="Montant"
-                    value={data.paymentMode === 'subscription'
-                      ? (selectedService?.monthlyPrice ? `${formatPrice(selectedService.monthlyPrice)}/mois` : `${formatPrice(Math.ceil((selectedService?.salePrice ?? 0) / 3))}/mois`)
-                      : formatPrice(selectedService?.salePrice)}
+                  <SummaryRow label="Prix conseillé" value={formatPrice(selectedService?.salePrice ?? 0)} />
+                  <SummaryRow label="Prix réel facturé"
+                    value={formatPrice(actualSalePrice ?? selectedService?.salePrice ?? 0)}
                     highlight />
 
                   {/* Brief */}

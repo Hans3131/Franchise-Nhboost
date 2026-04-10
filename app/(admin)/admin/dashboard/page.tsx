@@ -18,7 +18,7 @@ const SEVERITY_CONFIG = {
 }
 
 interface Stats {
-  kpis: { totalRevenue: number; totalMargin: number; ordersInProgress: number; activeFranchises: number; unprocessedLeads: number; conversionRate: number }
+  kpis: { theoreticalRevenue: number; totalRevenue: number; totalCosts: number; totalMargin: number; revenueVariance: number; ordersInProgress: number; activeFranchises: number; unprocessedLeads: number; conversionRate: number }
   topFranchises: { name: string; ca: number; orders: number; margin: number }[]
   inactiveFranchises: { id: string; name: string; lastActivity: string }[]
   monthlyRevenue: { month: string; revenue: number }[]
@@ -79,13 +79,41 @@ export default function AdminDashboardPage() {
         <p className="text-sm text-[#6B7280] mt-1">Performance globale du réseau NHBoost en temps réel.</p>
       </motion.div>
 
-      {/* KPIs */}
+      {/* KPIs financiers (théorique vs réel) */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
-        className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {[
-          { label: 'CA réseau', value: fmt(kpis.totalRevenue), icon: Euro, color: '#6AAEE5' },
+          { label: 'CA théorique', value: fmt(kpis.theoreticalRevenue), icon: Target, color: '#9CA3AF' },
+          { label: 'CA réel', value: fmt(kpis.totalRevenue), icon: Euro, color: '#6AAEE5' },
+          { label: 'Coûts totaux', value: fmt(kpis.totalCosts), icon: TrendingUp, color: '#F59E0B' },
+          { label: 'Marge réelle', value: fmt(kpis.totalMargin), icon: TrendingUp, color: '#22C55E' },
+          {
+            label: kpis.revenueVariance >= 0 ? 'Écart (sous conseil)' : 'Écart (sur conseil)',
+            value: (kpis.revenueVariance >= 0 ? '−' : '+') + fmt(Math.abs(kpis.revenueVariance)),
+            icon: AlertCircle,
+            color: kpis.revenueVariance > 0 ? '#EF4444' : '#22C55E',
+          },
+        ].map((kpi, i) => {
+          const Icon = kpi.icon
+          return (
+            <div key={i} className="rounded-xl bg-white border border-[#E2E8F2] shadow-[0_1px_3px_rgba(45,45,96,0.07)] px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${kpi.color}14` }}>
+                  <Icon className="w-3.5 h-3.5" style={{ color: kpi.color }} strokeWidth={1.75} />
+                </div>
+              </div>
+              <p className="text-[18px] font-bold text-[#2d2d60] leading-none">{kpi.value}</p>
+              <p className="text-[10px] text-[#9CA3AF] font-medium mt-1 uppercase tracking-wider">{kpi.label}</p>
+            </div>
+          )
+        })}
+      </motion.div>
+
+      {/* KPIs opérationnels */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.12 }}
+        className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
           { label: 'Commandes en cours', value: String(kpis.ordersInProgress), icon: ShoppingCart, color: '#F59E0B' },
-          { label: 'Marge globale', value: fmt(kpis.totalMargin), icon: TrendingUp, color: '#22C55E' },
           { label: 'Franchisés actifs', value: String(kpis.activeFranchises), icon: Users, color: '#8B5CF6' },
           { label: 'Leads non traités', value: String(kpis.unprocessedLeads), icon: Inbox, color: kpis.unprocessedLeads > 0 ? '#EF4444' : '#9CA3AF' },
           { label: 'Taux conversion', value: `${kpis.conversionRate}%`, icon: Target, color: '#14B8A6' },
