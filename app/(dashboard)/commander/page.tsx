@@ -350,12 +350,18 @@ export default function CommanderPage() {
     }
 
     // ── Sauvegarde Supabase ────────────────────────────────
+    // ⚠ Les triggers SQL (migration orders_auto_totals.sql) recalculent
+    // automatiquement price/cost/profit/etc. sur la ligne orders quand
+    // les order_items sont insérés. Les valeurs envoyées ici sont donc
+    // un fallback au cas où les triggers ne seraient pas installés.
     try {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         // Résoudre tous les service_id depuis les slugs (une seule requête)
+        // Note : le trigger BEFORE INSERT sur order_items résout aussi
+        // automatiquement service_id depuis service_slug → redondant mais sans impact.
         const slugs = Array.from(new Set(lines.map(l => l.serviceSlug)))
         const { data: catalogRows } = await supabase
           .from('services')
@@ -364,7 +370,7 @@ export default function CommanderPage() {
         const slugToId = new Map<string, string>((catalogRows ?? []).map(r => [r.slug as string, r.id as string]))
         const primaryServiceId = slugToId.get(first.serviceSlug) ?? null
 
-        // 1) Insérer l'en-tête orders
+        // 1) Insérer l'en-tête orders (les totaux seront éventuellement écrasés par le trigger)
         const { data: createdOrder, error: sbError } = await supabase
           .from('orders')
           .insert({
