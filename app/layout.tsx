@@ -21,8 +21,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={cn("h-full", inter.variable)}>
-      <body className="min-h-full">{children}</body>
+    <html
+      lang="fr"
+      className={cn("h-full", inter.variable)}
+      suppressHydrationWarning
+    >
+      <body className="min-h-full" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
