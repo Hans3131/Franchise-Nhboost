@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { Suspense, useEffect, useMemo, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Megaphone, Plus, Wallet, TrendingDown, Calendar, Loader2, X,
-  AlertTriangle, CheckCircle2, RotateCcw, Building2, Zap,
+  AlertTriangle, CheckCircle2, Building2, Zap,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -48,9 +48,23 @@ const fmt = (n: number) =>
   '€' + Math.round(n).toLocaleString('fr-FR')
 
 // ───────────────────────────────────────────────────────────────
-// Page principale
+// Page principale (wrapper Suspense)
 // ───────────────────────────────────────────────────────────────
 export default function BudgetAdsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-7xl mx-auto flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-8 h-8 text-[#6AAEE5] animate-spin" />
+        </div>
+      }
+    >
+      <BudgetAdsContent />
+    </Suspense>
+  )
+}
+
+function BudgetAdsContent() {
   const searchParams = useSearchParams()
   const [campaigns, setCampaigns] = useState<CampaignBalance[]>([])
   const [clients, setClients] = useState<ClientLite[]>([])
