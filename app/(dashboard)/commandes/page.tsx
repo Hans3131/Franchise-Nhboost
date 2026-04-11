@@ -22,6 +22,17 @@ type InternalProgress = 'pending' | 'in_progress' | 'completed'
   | 'preparation' | 'v1_ready' | 'v2_ready' | 'domain_config' | 'site_done'
   | 'strategy' | 'shooting' | 'launching' | 'live'
 
+// Statuts de paiement (incluant les états Stripe : subscription + one-shot)
+type PaymentStatusKey =
+  | 'paid' | 'unpaid' | 'refunded'
+  | 'processing' | 'failed'
+  | 'trialing' | 'active' | 'past_due' | 'canceled'
+
+const VALID_PAYMENT_STATUSES: PaymentStatusKey[] = [
+  'paid','unpaid','refunded','processing','failed',
+  'trialing','active','past_due','canceled',
+]
+
 interface Order {
   id:                      string
   ref:                     string
@@ -41,7 +52,7 @@ interface Order {
   date:                    string
   price:                   number
   status:                  OrderStatus
-  paymentStatus:           'paid' | 'unpaid' | 'refunded'
+  paymentStatus:           PaymentStatusKey
   // ── Finances ──
   salePrice:               number   // prix conseillé (unitaire)
   actualSalePrice:         number   // prix réellement facturé (unitaire)
@@ -83,7 +94,11 @@ function mapRow(row: Record<string, unknown>): Order {
     date:            String(row.created_at     ?? ''),
     price,
     status:         (row.status         as OrderStatus)           ?? 'pending',
-    paymentStatus:  (row.payment_status as Order['paymentStatus']) ?? 'unpaid',
+    paymentStatus:  (
+      VALID_PAYMENT_STATUSES.includes(row.payment_status as PaymentStatusKey)
+        ? (row.payment_status as PaymentStatusKey)
+        : 'unpaid'
+    ),
     salePrice:       recommendedUnit,
     actualSalePrice: actualUnit,
     internalCost:    costUnit,
@@ -101,11 +116,20 @@ const STATUS_CONFIG: Record<OrderStatus, {
   cancelled:   { label: 'Annulé',     bg: 'rgba(239,68,68,0.12)',   text: '#EF4444', dot: '#EF4444', icon: XCircle },
 }
 
-const PAYMENT_CONFIG = {
-  paid:     { label: 'Payé',      color: '#22C55E', bg: 'rgba(34,197,94,0.1)'   },
-  unpaid:   { label: 'Non payé',  color: '#F59E0B', bg: 'rgba(245,158,11,0.1)'  },
-  refunded: { label: 'Remboursé', color: '#8B95C4', bg: 'rgba(139,149,196,0.1)' },
+const PAYMENT_CONFIG: Record<PaymentStatusKey, { label: string; color: string; bg: string }> = {
+  paid:       { label: 'Payé',         color: '#22C55E', bg: 'rgba(34,197,94,0.1)'   },
+  unpaid:     { label: 'Non payé',     color: '#F59E0B', bg: 'rgba(245,158,11,0.1)'  },
+  refunded:   { label: 'Remboursé',    color: '#8B95C4', bg: 'rgba(139,149,196,0.1)' },
+  processing: { label: 'En cours…',    color: '#6AAEE5', bg: 'rgba(106,174,229,0.1)' },
+  failed:     { label: 'Échec',        color: '#EF4444', bg: 'rgba(239,68,68,0.1)'   },
+  trialing:   { label: 'Essai gratuit',color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)'  },
+  active:     { label: 'Actif',        color: '#22C55E', bg: 'rgba(34,197,94,0.1)'   },
+  past_due:   { label: 'Retard paiement', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+  canceled:   { label: 'Annulé',       color: '#9CA3AF', bg: 'rgba(156,163,175,0.1)' },
 }
+
+// Fallback pour éviter tout crash si un statut inconnu arrive de la DB
+const PAYMENT_FALLBACK = PAYMENT_CONFIG.unpaid
 
 const FILTER_TABS: { key: OrderStatus | 'all'; label: string; icon: React.ElementType }[] = [
   { key: 'all',         label: 'Toutes',    icon: Inbox },
@@ -209,7 +233,7 @@ function OrderDetailModal({
   onSave: (updated: Order) => void
 }) {
   const s = STATUS_CONFIG[order.status]
-  const p = PAYMENT_CONFIG[order.paymentStatus]
+  const p = PAYMENT_CONFIG[order.paymentStatus] ?? PAYMENT_FALLBACK
   const StatusIcon = s.icon
 
   const [isEditing, setIsEditing] = useState(false)
@@ -835,7 +859,7 @@ export default function CommandesPage() {
                 <AnimatePresence initial={false}>
                   {pendingOrders.map((order, i) => {
                 const s        = STATUS_CONFIG[order.status]
-                const p        = PAYMENT_CONFIG[order.paymentStatus]
+                const p        = PAYMENT_CONFIG[order.paymentStatus] ?? PAYMENT_FALLBACK
                 const expanded = expandedId === order.id
 
                 return (
@@ -1066,7 +1090,7 @@ export default function CommandesPage() {
                 <AnimatePresence initial={false}>
                   {inProgressOrders.map((order, i) => {
                     const s        = STATUS_CONFIG[order.status]
-                    const p        = PAYMENT_CONFIG[order.paymentStatus]
+                    const p        = PAYMENT_CONFIG[order.paymentStatus] ?? PAYMENT_FALLBACK
                     const expanded = expandedId === order.id
                     return (
                       <motion.div key={order.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
