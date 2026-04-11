@@ -149,6 +149,46 @@ export async function POST(req: Request) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
+
+        // ─── Cas spécial : recharge Budget ADS ──────
+        // Détecté via metadata.billing_type='ads_topup'
+        // Pas d'order liée — on crée directement une ligne ad_budget_credits
+        if (session.metadata?.billing_type === 'ads_topup') {
+          const campaignId = session.metadata.campaign_id
+          const userIdMeta = session.metadata.user_id
+
+          if (!campaignId || !userIdMeta) {
+            console.warn('[stripe webhook] ads_topup sans campaign_id ou user_id')
+            break
+          }
+
+          const amount = session.amount_total != null ? session.amount_total / 100 : 0
+          const paymentIntentId =
+            typeof session.payment_intent === 'string' ? session.payment_intent : null
+
+          const { error: creditErr } = await svc.from('ad_budget_credits').insert({
+            user_id: userIdMeta,
+            campaign_id: campaignId,
+            amount,
+            currency: session.currency ?? 'eur',
+            stripe_session_id: session.id,
+            stripe_payment_intent_id: paymentIntentId,
+            status: 'available',
+            paid_at: new Date().toISOString(),
+            note: 'Recharge Stripe Checkout',
+          })
+
+          if (creditErr) {
+            console.error('[stripe webhook] ad_budget_credits insert error:', creditErr.message)
+            throw creditErr
+          }
+          console.log(
+            `[stripe webhook] ✓ ads recharge ${amount}€ → campaign ${campaignId}`,
+          )
+          break
+        }
+
+        // ─── Cas standard : commande ────────────────
         const orderId = session.metadata?.order_id
 
         if (!orderId) {
