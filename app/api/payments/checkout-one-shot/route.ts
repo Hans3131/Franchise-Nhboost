@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe, getSiteUrl } from '@/lib/stripe/client'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,10 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     }
+
+    // ─── Rate limit : 5 checkouts par minute par user ─────
+    const blocked = checkRateLimit('checkout-one-shot', user.id, 5, 60_000)
+    if (blocked) return blocked
 
     // ─── 2. Validation du body ─────────────────────────────
     let body: RequestBody

@@ -197,6 +197,16 @@ export default function ParametresPage() {
     setLoggingOut(true)
     const supabase = createClient()
     await supabase.auth.signOut()
+    // Nettoyage PII du localStorage (V-15 : évite que les données
+    // persistent après déconnexion et soient lisibles par XSS)
+    try {
+      localStorage.removeItem('nhboost_orders')
+      localStorage.removeItem('nhboost_clients')
+      localStorage.removeItem('nhboost_client_notes')
+      localStorage.removeItem('nhboost_notifications')
+      localStorage.removeItem('nhboost_tickets')
+      localStorage.removeItem('nhboost_profile')
+    } catch { /* SSR-safe */ }
     router.push('/login')
   }
 

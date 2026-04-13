@@ -125,9 +125,12 @@ export async function update(
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('clients').update(patch).eq('id', id).eq('user_id', user.id)
+      const { error } = await supabase.from('clients').update(patch).eq('id', id).eq('user_id', user.id)
+      if (error) console.error('[clientStore.update] error:', error.message)
     }
-  } catch {}
+  } catch (e) {
+    console.error('[clientStore.update] exception:', e)
+  }
 }
 
 export async function remove(id: string): Promise<void> {
@@ -136,9 +139,12 @@ export async function remove(id: string): Promise<void> {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('clients').delete().eq('id', id).eq('user_id', user.id)
+      const { error } = await supabase.from('clients').delete().eq('id', id).eq('user_id', user.id)
+      if (error) console.error('[clientStore.remove] error:', error.message)
     }
-  } catch {}
+  } catch (e) {
+    console.error('[clientStore.remove] exception:', e)
+  }
 }
 
 // ─── Notes ───────────────────────────────────────────────────
@@ -146,13 +152,17 @@ export async function remove(id: string): Promise<void> {
 export async function getNotes(clientId: string): Promise<ClientNote[]> {
   try {
     const supabase = createClient()
+    // RLS protège déjà, mais on passe par le client (user_id) pour defense-in-depth
     const { data, error } = await supabase
       .from('client_notes')
       .select('*')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false })
+    if (error) console.error('[clientStore.getNotes] error:', error.message)
     if (!error && data) return data as ClientNote[]
-  } catch {}
+  } catch (e) {
+    console.error('[clientStore.getNotes] exception:', e)
+  }
   return localGetNotes().filter(n => n.client_id === clientId)
 }
 
@@ -193,8 +203,16 @@ export async function updateNote(
   localSaveNotes(notes)
   try {
     const supabase = createClient()
-    await supabase.from('client_notes').update(patch).eq('id', noteId)
-  } catch {}
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      // RLS protège via le join client_notes → clients → user_id
+      // On logue les erreurs au lieu de les avaler
+      const { error } = await supabase.from('client_notes').update(patch).eq('id', noteId)
+      if (error) console.error('[clientStore.updateNote] error:', error.message)
+    }
+  } catch (e) {
+    console.error('[clientStore.updateNote] exception:', e)
+  }
 }
 
 // ─── Client orders ───────────────────────────────────────────

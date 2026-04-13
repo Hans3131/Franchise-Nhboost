@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 
 const VALID_PROGRESS = [
   'pending', 'in_progress', 'completed',
   'preparation', 'v1_ready', 'v2_ready', 'domain_config', 'site_done',
   'strategy', 'shooting', 'launching', 'live',
-]
+] as const
 
-const VALID_STATUS = ['pending', 'in_progress', 'completed', 'cancelled']
+const VALID_STATUS = ['pending', 'in_progress', 'completed', 'cancelled'] as const
+
+const bodySchema = z.object({
+  orderId: z.string().uuid('ID commande invalide'),
+  internalProgressStatus: z.enum(VALID_PROGRESS).optional(),
+  status: z.enum(VALID_STATUS).optional(),
+}).refine(
+  d => d.internalProgressStatus || d.status,
+  { message: 'Au moins un statut requis (internalProgressStatus ou status)' },
+)
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,35 +31,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
     }
 
-    const { orderId, internalProgressStatus, status } = await req.json()
-    if (!orderId) return NextResponse.json({ error: 'orderId requis' }, { status: 400 })
+    // Validation Zod
+    let body: z.infer<typeof bodySchema>
+    try {
+      const raw = await req.json()
+      body = bodySchema.parse(raw)
+    } catch (e) {
+      const msg = e instanceof z.ZodError ? e.issues[0]?.message : 'JSON invalide'
+      return NextResponse.json({ error: msg }, { status: 400 })
+    }
 
     const update: Record<string, unknown> = {}
 
-    if (internalProgressStatus) {
-      if (!VALID_PROGRESS.includes(internalProgressStatus)) {
-        return NextResponse.json({ error: 'Statut de progression invalide' }, { status: 400 })
-      }
-      update.internal_progress_status = internalProgressStatus
+    if (body.internalProgressStatus) {
+      update.internal_progress_status = body.internalProgressStatus
 
       // Auto-sync main status
-      if (['preparation', 'v1_ready', 'v2_ready', 'domain_config', 'strategy', 'shooting', 'launching'].includes(internalProgressStatus)) {
+      if (['preparation', 'v1_ready', 'v2_ready', 'domain_config', 'strategy', 'shooting', 'launching'].includes(body.internalProgressStatus)) {
         update.status = 'in_progress'
-      } else if (['site_done', 'live', 'completed'].includes(internalProgressStatus)) {
+      } else if (['site_done', 'live', 'completed'].includes(body.internalProgressStatus)) {
         update.status = 'completed'
       }
     }
 
-    if (status && VALID_STATUS.includes(status)) {
-      update.status = status
-    }
-
-    if (Object.keys(update).length === 0) {
-      return NextResponse.json({ error: 'Aucune modification' }, { status: 400 })
+    if (body.status) {
+      update.status = body.status
     }
 
     const svc = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-    const { error } = await svc.from('orders').update(update).eq('id', orderId)
+    const { error } = await svc.from('orders').update(update).eq('id', body.orderId)
 
     if (error) {
       console.error('[update-order-status] error:', error.message)
