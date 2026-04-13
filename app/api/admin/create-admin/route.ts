@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     })
 
     if (authError || !newUser?.user) {
-      return NextResponse.json({ error: authError?.message ?? 'Erreur création utilisateur' }, { status: 500 })
+      console.error('[create-admin] auth error:', authError?.message)
+      return NextResponse.json({ error: 'Erreur création du compte' }, { status: 500 })
     }
 
     // 6. Create profile with role
@@ -62,7 +63,8 @@ export async function POST(req: NextRequest) {
     if (profileError) {
       // Rollback: delete the auth user
       await svc.auth.admin.deleteUser(newUser.user.id)
-      return NextResponse.json({ error: `Erreur profil: ${profileError.message}` }, { status: 500 })
+      console.error('[create-admin] profile error:', profileError.message)
+      return NextResponse.json({ error: 'Erreur création du profil' }, { status: 500 })
     }
 
     return NextResponse.json({

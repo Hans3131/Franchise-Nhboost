@@ -28,7 +28,10 @@ export async function POST(req: NextRequest) {
       .update({ account_status: newStatus })
       .eq('id', franchiseeId)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error('[toggle-franchisee] error:', error.message)
+      return NextResponse.json({ error: 'Erreur mise à jour' }, { status: 500 })
+    }
 
     // If suspending, also ban the auth user
     if (action === 'suspend') {

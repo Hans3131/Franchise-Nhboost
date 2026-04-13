@@ -51,7 +51,10 @@ export async function POST(req: NextRequest) {
     const svc = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
     const { error } = await svc.from('orders').update(update).eq('id', orderId)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error('[update-order-status] error:', error.message)
+      return NextResponse.json({ error: 'Erreur mise à jour' }, { status: 500 })
+    }
 
     return NextResponse.json({ ok: true })
   } catch {
