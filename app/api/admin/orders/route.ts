@@ -28,7 +28,8 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (ordersErr) {
-      return NextResponse.json({ error: ordersErr.message }, { status: 500 })
+      console.error('[admin/orders] query error:', ordersErr.message)
+      return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
     }
 
     // Fetch all profiles for franchise name mapping

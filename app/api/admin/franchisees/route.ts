@@ -28,7 +28,8 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (profilesErr) {
-      return NextResponse.json({ error: profilesErr.message }, { status: 500 })
+      console.error('[admin/franchisees] query error:', profilesErr.message)
+      return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
     }
 
     // Include all users (franchisees + admins shown with role)
