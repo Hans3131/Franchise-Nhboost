@@ -232,7 +232,19 @@ export interface Lead {
   message?: string
   status: LeadStatus
   client_id?: string
+  fb_leadgen_id?: string
   metadata?: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface FbPageConnection {
+  id: string
+  user_id: string
+  page_id: string
+  page_name?: string
+  page_access_token: string
+  is_active: boolean
   created_at: string
   updated_at: string
 }
