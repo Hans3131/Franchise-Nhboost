@@ -185,6 +185,12 @@ export default function CommanderPage() {
   const [submitted,  setSubmitted]  = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [newOrderRef, setNewOrderRef] = useState('')
+  // Erreur de paiement : order sauvegardée mais Stripe a échoué
+  const [paymentError, setPaymentError] = useState<{
+    orderRef: string
+    orderId: string | null
+    message: string
+  } | null>(null)
   // Multi-lignes : chaque ligne = un service à facturer
   const [lines, setLines] = useState<ServiceLine[]>([])
   const linesValidation = validateLines(lines)
@@ -448,46 +454,107 @@ export default function CommanderPage() {
       link:    '/commandes',
     })
 
-    // ── Redirection Stripe Checkout (auto one-shot vs subscription) ──
-    // Règles :
-    //   - Toutes les lignes récurrentes → mode 'subscription' avec 14j d'essai
-    //   - Toutes les lignes ponctuelles → mode 'payment'
-    //   - Mixte → pour l'instant, on bascule sur 'subscription' et les lignes
-    //     one-shot seront ignorées (à gérer dans un round futur)
-    if (supabaseOrderId) {
-      // Détecte le type dominant depuis le catalogue local
-      const hasSubscription = lines.some((line) => {
-        const svc = SERVICES.find((s) => s.id === line.serviceSlug)
-        return svc?.type === 'subscription'
-      })
-      const endpoint = hasSubscription
-        ? '/api/payments/checkout-subscription'
-        : '/api/payments/checkout-one-shot'
+    // ═══════════════════════════════════════════════════════════
+    // ── REDIRECTION STRIPE OBLIGATOIRE ──
+    // Règle : pas de redirection Stripe réussie → pas de "commande
+    // enregistrée". La commande reste en DB avec payment_status='unpaid'
+    // et le franchisé doit retenter le paiement depuis /commandes.
+    // ═══════════════════════════════════════════════════════════
 
-      try {
-        const checkoutRes = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_id: supabaseOrderId }),
-        })
-        const checkoutData = await checkoutRes.json()
-        if (checkoutRes.ok && checkoutData.url) {
-          // Redirection vers Stripe — la page success/cancel prend le relais
-          window.location.href = checkoutData.url
-          return
-        } else {
-          console.warn(`[Stripe] ${endpoint} failed:`, checkoutData.error)
-          // On tombe dans le fallback ci-dessous (écran de confirmation sans paiement)
-        }
-      } catch (e) {
-        console.error('[Stripe] checkout exception:', e)
-      }
+    // Cas 1 : la commande n'a pas pu être créée en DB
+    if (!supabaseOrderId) {
+      setSubmitting(false)
+      setPaymentError({
+        orderRef: order.ref,
+        orderId: null,
+        message:
+          'La commande n\'a pas pu être enregistrée en base de données. ' +
+          'Vérifiez votre connexion et réessayez. Si le problème persiste, contactez le support.',
+      })
+      return
     }
 
-    // Fallback : écran de confirmation classique (pas de redirection Stripe)
-    setSubmitting(false)
-    setNewOrderRef(order.ref)
-    setSubmitted(true)
+    // Cas 2 : appel à Stripe Checkout
+    const hasSubscription = lines.some((line) => {
+      const svc = SERVICES.find((s) => s.id === line.serviceSlug)
+      return svc?.type === 'subscription'
+    })
+    const endpoint = hasSubscription
+      ? '/api/payments/checkout-subscription'
+      : '/api/payments/checkout-one-shot'
+
+    try {
+      const checkoutRes = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: supabaseOrderId }),
+      })
+      const checkoutData = await checkoutRes.json()
+
+      if (checkoutRes.ok && checkoutData.url) {
+        // ✓ Redirection vers Stripe — la page success/cancel prend le relais
+        window.location.href = checkoutData.url
+        return
+      }
+
+      // ✗ Stripe a renvoyé une erreur → PAS de fallback, on affiche l'erreur
+      console.error(`[Stripe] ${endpoint} failed:`, checkoutData.error)
+      setSubmitting(false)
+      setPaymentError({
+        orderRef: order.ref,
+        orderId: supabaseOrderId,
+        message:
+          checkoutData.error ??
+          'Le service de paiement Stripe est indisponible. Votre commande a été enregistrée mais reste impayée.',
+      })
+    } catch (e) {
+      console.error('[Stripe] checkout exception:', e)
+      setSubmitting(false)
+      setPaymentError({
+        orderRef: order.ref,
+        orderId: supabaseOrderId,
+        message:
+          'Erreur réseau lors de la redirection vers Stripe. ' +
+          'Votre commande a été enregistrée — retentez le paiement depuis "Mes commandes".',
+      })
+    }
+  }
+
+  // ─── Retry payment from error screen ─────────────────────────
+  const retryPayment = async () => {
+    if (!paymentError?.orderId) return
+    setSubmitting(true)
+    const hasSubscription = lines.some((line) => {
+      const svc = SERVICES.find((s) => s.id === line.serviceSlug)
+      return svc?.type === 'subscription'
+    })
+    const endpoint = hasSubscription
+      ? '/api/payments/checkout-subscription'
+      : '/api/payments/checkout-one-shot'
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: paymentError.orderId }),
+      })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        window.location.href = data.url
+        return
+      }
+      setSubmitting(false)
+      setPaymentError({
+        ...paymentError,
+        message: data.error ?? 'Nouvelle tentative échouée.',
+      })
+    } catch (e) {
+      setSubmitting(false)
+      setPaymentError({
+        ...paymentError,
+        message: e instanceof Error ? e.message : 'Erreur réseau',
+      })
+    }
   }
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
@@ -499,7 +566,63 @@ export default function CommanderPage() {
     setData(d => ({ ...d, files: d.files?.filter((_, idx) => idx !== i) }))
   }, [])
 
-  // ── Confirmation ──────────────────────────────────────────
+  // ── Écran ERREUR paiement ────────────────────────────────
+  // Affiché quand la redirection Stripe échoue : la commande existe
+  // mais reste UNPAID. Le franchisé doit retenter le paiement.
+  if (paymentError) {
+    return (
+      <div className="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          className="w-20 h-20 rounded-full bg-[rgba(239,68,68,0.15)] border-2 border-[#EF4444] flex items-center justify-center mb-6"
+        >
+          <span className="text-[#EF4444] text-3xl font-bold">!</span>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <h2 className="text-2xl font-bold text-[#2d2d60] mb-2">Paiement requis</h2>
+          {paymentError.orderRef && (
+            <p className="text-[13px] font-mono text-[#EF4444] mb-3">{paymentError.orderRef}</p>
+          )}
+          <div className="rounded-xl bg-[rgba(239,68,68,0.06)] border border-[rgba(239,68,68,0.2)] px-4 py-3 text-[13px] text-[#B91C1C] text-left mb-4 max-w-md mx-auto">
+            {paymentError.message}
+          </div>
+          <p className="text-[12px] text-[#6B7280] mb-6">
+            La commande n&apos;est pas validée tant que le paiement n&apos;a pas abouti.
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            {paymentError.orderId && (
+              <button
+                onClick={retryPayment}
+                disabled={submitting}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#2d2d60] to-[#4A7DC4] text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+              >
+                {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirection…</> : 'Retenter le paiement'}
+              </button>
+            )}
+            <a
+              href="/commandes"
+              className="px-6 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#E2E8F2] text-[#2d2d60] text-sm font-medium hover:bg-[#E2E8F2] transition-colors"
+            >
+              Voir mes commandes
+            </a>
+            <button
+              onClick={() => { setPaymentError(null); setCurrent(1); setData({}); }}
+              className="px-6 py-2.5 rounded-xl bg-transparent text-[#6B7280] text-sm font-medium hover:text-[#2d2d60] transition-colors"
+            >
+              Annuler
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
+
+  // ── Confirmation (après paiement réussi via webhook Stripe) ─
+  // Note : cet écran n'est plus accessible directement depuis le submit.
+  // Il reste comme fallback technique si jamais un appelant manuel
+  // pose setSubmitted(true). Le vrai retour de Stripe se fait via
+  // /paiement/success (pris en charge par le webhook).
   if (submitted) {
     return (
       <div className="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
@@ -511,10 +634,9 @@ export default function CommanderPage() {
           <CheckCircle2 className="w-10 h-10 text-[#22C55E]" />
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <h2 className="text-2xl font-bold text-[#2d2d60] mb-2">Commande enregistrée !</h2>
+          <h2 className="text-2xl font-bold text-[#2d2d60] mb-2">Commande validée !</h2>
           {newOrderRef && <p className="text-[13px] font-mono text-[#6AAEE5] mb-1">{newOrderRef}</p>}
-          <p className="text-[#6B7280] mb-2">Votre commande est en attente de traitement.</p>
-          <p className="text-[12px] text-[#9CA3AF] mb-6">Le paiement sera configuré prochainement via Stripe.</p>
+          <p className="text-[#6B7280] mb-6">Votre paiement est confirmé.</p>
           <div className="flex gap-3 justify-center">
             <a href="/commandes"
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#2d2d60] to-[#4A7DC4] text-white text-sm font-semibold hover:opacity-90 transition-opacity">
@@ -1324,11 +1446,13 @@ Accès hébergement / CMS : .....`}
                     style={{ background: 'linear-gradient(135deg, #2d2d60 0%, #4A7DC4 50%, #6AAEE5 100%)', boxShadow: '0 0 32px rgba(106,174,229,0.3)' }}
                   >
                     {submitting
-                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement...</>
-                      : <><CheckCircle2 className="w-4 h-4" /> Confirmer la commande <ChevronRight className="w-4 h-4" /></>
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirection vers Stripe...</>
+                      : <><CheckCircle2 className="w-4 h-4" /> Valider et payer <ChevronRight className="w-4 h-4" /></>
                     }
                   </button>
-                  <p className="text-center text-[11px] text-[#9CA3AF] mt-2.5">Le paiement Stripe sera activé prochainement</p>
+                  <p className="text-center text-[11px] text-[#9CA3AF] mt-2.5">
+                    Paiement sécurisé via Stripe · Vous serez redirigé vers une page de paiement sécurisée
+                  </p>
                 </div>
 
                 <NavButtons onPrev={() => go(-1)} hideNext />
