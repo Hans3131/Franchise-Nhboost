@@ -128,20 +128,31 @@ export async function POST(req: NextRequest) {
     const userId = newUser.user.id
     const code = franchise_code || `FRA-${userId.slice(0, 6).toUpperCase()}`
 
-    // ─── 4. Create profile ────────────────────────────────
-    const { error: profileError } = await svc.from('profiles').insert({
-      id: userId,
-      company_name: `${first_name} ${last_name}`,
-      first_name,
-      last_name,
-      phone,
-      address,
-      sector,
-      franchise_code: code,
-      franchise_key: `FK-${userId.slice(0, 8).toUpperCase()}`,
-      role: 'franchisee',
-      account_status,
-    })
+    // ─── 4. Create/Update profile ────────────────────────
+    // IMPORTANT : Supabase a un trigger handle_new_user() qui crée
+    // automatiquement une ligne profiles (id + franchise_code auto)
+    // dès que auth.admin.createUser() est appelé. Pour ne pas
+    // entrer en conflit, on utilise UPSERT au lieu de INSERT :
+    // - Si la ligne existe déjà (trigger) → on met à jour
+    // - Si elle n'existe pas (trigger désactivé) → on la crée
+    const { error: profileError } = await svc
+      .from('profiles')
+      .upsert(
+        {
+          id: userId,
+          company_name: `${first_name} ${last_name}`,
+          first_name,
+          last_name,
+          phone,
+          address,
+          sector,
+          franchise_code: code,
+          franchise_key: `FK-${userId.slice(0, 8).toUpperCase()}`,
+          role: 'franchisee',
+          account_status,
+        },
+        { onConflict: 'id' },
+      )
 
     if (profileError) {
       // Rollback : on supprime l'utilisateur auth créé juste avant
