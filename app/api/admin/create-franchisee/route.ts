@@ -79,7 +79,19 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── 3. Create auth user ──────────────────────────────
-    const svc = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    // Vérifie que les env vars sont là (cas Vercel pas redeploy)
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[create-franchisee] Supabase env vars missing')
+      return NextResponse.json(
+        { error: 'Configuration serveur manquante (SUPABASE_SERVICE_ROLE_KEY). Contactez l\'administrateur système.' },
+        { status: 500 },
+      )
+    }
+
+    const svc = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+    )
 
     const { data: newUser, error: authError } = await svc.auth.admin.createUser({
       email,
@@ -88,8 +100,29 @@ export async function POST(req: NextRequest) {
     })
 
     if (authError || !newUser?.user) {
-      console.error('[create-franchisee] auth error:', authError?.message)
-      return NextResponse.json({ error: 'Erreur création du compte' }, { status: 500 })
+      const rawMsg = authError?.message ?? 'Utilisateur non créé'
+      console.error('[create-franchisee] auth error:', rawMsg, 'code:', authError?.code, 'status:', authError?.status)
+
+      // Map les erreurs Supabase aux messages FR clairs
+      let userMsg = 'Erreur création du compte'
+      const lowerMsg = rawMsg.toLowerCase()
+
+      if (lowerMsg.includes('already') && (lowerMsg.includes('registered') || lowerMsg.includes('exists'))) {
+        userMsg = 'Cet email est déjà utilisé par un autre franchisé ou admin.'
+      } else if (lowerMsg.includes('email') && lowerMsg.includes('invalid')) {
+        userMsg = 'Email invalide. Vérifiez le format.'
+      } else if (lowerMsg.includes('password') && (lowerMsg.includes('short') || lowerMsg.includes('weak') || lowerMsg.includes('6 char'))) {
+        userMsg = 'Mot de passe trop court (min. 6 caractères Supabase).'
+      } else if (lowerMsg.includes('rate limit')) {
+        userMsg = 'Trop de créations récentes. Attendez quelques minutes.'
+      } else if (lowerMsg.includes('signups') && lowerMsg.includes('disabled')) {
+        userMsg = 'Les inscriptions sont désactivées dans Supabase. Active-les dans Auth → Providers.'
+      } else {
+        // Détail pour faciliter le debug admin
+        userMsg = `Erreur création du compte : ${rawMsg}`
+      }
+
+      return NextResponse.json({ error: userMsg }, { status: 500 })
     }
 
     const userId = newUser.user.id
@@ -111,9 +144,28 @@ export async function POST(req: NextRequest) {
     })
 
     if (profileError) {
+      // Rollback : on supprime l'utilisateur auth créé juste avant
       await svc.auth.admin.deleteUser(userId)
-      console.error('[create-franchisee] profile error:', profileError.message)
-      return NextResponse.json({ error: 'Erreur création du profil' }, { status: 500 })
+      console.error('[create-franchisee] profile error:', profileError.message, 'code:', profileError.code)
+
+      let userMsg = 'Erreur création du profil'
+      const lowerMsg = profileError.message.toLowerCase()
+
+      if (profileError.code === '23505' || lowerMsg.includes('duplicate')) {
+        if (lowerMsg.includes('franchise_code')) {
+          userMsg = 'Ce code franchise est déjà utilisé. Choisissez-en un autre.'
+        } else if (lowerMsg.includes('franchise_key')) {
+          userMsg = 'Conflit de clé franchise (réessayez).'
+        } else {
+          userMsg = 'Un profil avec ces données existe déjà.'
+        }
+      } else if (profileError.code === '42703' || lowerMsg.includes('column') && lowerMsg.includes('does not exist')) {
+        userMsg = 'Une colonne manque dans la table profiles (role, account_status, first_name, last_name). Exécute la migration clients_pipeline_fields.sql.'
+      } else {
+        userMsg = `Erreur création du profil : ${profileError.message}`
+      }
+
+      return NextResponse.json({ error: userMsg }, { status: 500 })
     }
 
     // ─── 5. Send welcome email (XSS-safe) ─────────────────
