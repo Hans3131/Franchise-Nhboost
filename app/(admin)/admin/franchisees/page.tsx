@@ -122,9 +122,14 @@ export default function AdminFranchiseesPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Erreur')
 
+      // Le password est dans la réponse SI auto-généré côté backend,
+      // sinon on utilise celui tapé par l'admin dans le formulaire
+      const resolvedPassword =
+        data.franchisee.generated_password ?? form.password ?? '[Mot de passe défini par vous]'
+
       setCredentials({
         email: data.franchisee.email,
-        password: data.franchisee.password,
+        password: resolvedPassword,
         franchise_code: data.franchisee.franchise_code,
         first_name: data.franchisee.first_name,
         last_name: data.franchisee.last_name,

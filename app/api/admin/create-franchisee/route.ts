@@ -56,7 +56,11 @@ export async function POST(req: NextRequest) {
     const sector = sanitize(body.sector, MAX_FIELD) || null
     const franchise_code = sanitize(body.franchise_code, 20) || null
     const account_status = sanitize(body.account_status, 20) || 'active'
-    const password = sanitize(body.password, 128) || generatePassword()
+    // Si admin a fourni un password → l'utiliser. Sinon → générer et l'envoyer
+    // UNE FOIS dans la réponse pour que l'admin puisse le communiquer.
+    const providedPassword = sanitize(body.password, 128)
+    const passwordWasGenerated = !providedPassword
+    const password = providedPassword || generatePassword()
 
     if (!email || !EMAIL_RE.test(email)) {
       return NextResponse.json({ error: 'Email invalide' }, { status: 400 })
@@ -147,7 +151,15 @@ export async function POST(req: NextRequest) {
     // ─── 6. Réponse (SANS mot de passe) ───────────────────
     return NextResponse.json({
       ok: true,
-      franchisee: { id: userId, email, first_name, last_name, franchise_code: code },
+      franchisee: {
+        id: userId,
+        email,
+        first_name,
+        last_name,
+        franchise_code: code,
+        // Renvoyé UNIQUEMENT si auto-généré (route admin HTTPS, context admin authentifié)
+        ...(passwordWasGenerated ? { generated_password: password } : {}),
+      },
     })
   } catch (e) {
     console.error('[create-franchisee] unexpected error:', e)
