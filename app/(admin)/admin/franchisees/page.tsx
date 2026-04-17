@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, UserPlus, Search, Shield, ShieldAlert, ShieldCheck,
   Loader2, AlertCircle, X, Eye, EyeOff, Copy, Check,
+  Trash2, AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -43,6 +44,11 @@ export default function AdminFranchiseesPage() {
   const [showModal, setShowModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  // État pour la modal de suppression (confirmation double)
+  const [deleteTarget, setDeleteTarget] = useState<Franchisee | null>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [credentials, setCredentials] = useState<CreatedCredentials | null>(null)
   const [copied, setCopied] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -107,6 +113,39 @@ export default function AdminFranchiseesPage() {
       loadFranchisees()
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    const expected = (deleteTarget.email || '').trim().toLowerCase()
+    const typed = deleteConfirmText.trim().toLowerCase()
+    if (expected && typed !== expected) {
+      setDeleteError(`Veuillez retaper exactement l'email : ${expected}`)
+      return
+    }
+    setDeletingId(deleteTarget.id)
+    setDeleteError(null)
+    try {
+      const res = await fetch('/api/admin/delete-franchisee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ franchiseeId: deleteTarget.id, confirm: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setDeleteError(data.error ?? 'Erreur de suppression')
+        setDeletingId(null)
+        return
+      }
+      // Retire la ligne du tableau sans recharger tout
+      setFranchisees(prev => prev.filter(f => f.id !== deleteTarget.id))
+      setDeleteTarget(null)
+      setDeleteConfirmText('')
+      setDeletingId(null)
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Erreur réseau')
+      setDeletingId(null)
     }
   }
 
@@ -321,21 +360,38 @@ export default function AdminFranchiseesPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => handleToggle(f.id, f.account_status)}
-                            disabled={togglingId === f.id}
-                            className={cn(
-                              'px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all',
-                              f.account_status === 'suspended'
-                                ? 'bg-[#22C55E]/10 text-[#22C55E] hover:bg-[#22C55E]/20'
-                                : 'bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20',
-                              togglingId === f.id && 'opacity-50 cursor-wait',
-                            )}
-                          >
-                            {togglingId === f.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin inline" />
-                            ) : f.account_status === 'suspended' ? 'Reactiver' : 'Suspendre'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleToggle(f.id, f.account_status)}
+                              disabled={togglingId === f.id || deletingId === f.id}
+                              className={cn(
+                                'px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all',
+                                f.account_status === 'suspended'
+                                  ? 'bg-[#22C55E]/10 text-[#22C55E] hover:bg-[#22C55E]/20'
+                                  : 'bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20',
+                                (togglingId === f.id || deletingId === f.id) && 'opacity-50 cursor-wait',
+                              )}
+                            >
+                              {togglingId === f.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin inline" />
+                              ) : f.account_status === 'suspended' ? 'Reactiver' : 'Suspendre'}
+                            </button>
+                            <button
+                              onClick={() => { setDeleteTarget(f); setDeleteError(null); setDeleteConfirmText('') }}
+                              disabled={togglingId === f.id || deletingId === f.id}
+                              title="Supprimer définitivement"
+                              className={cn(
+                                'p-1.5 rounded-lg transition-all',
+                                'bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20',
+                                (togglingId === f.id || deletingId === f.id) && 'opacity-50 cursor-wait',
+                              )}
+                            >
+                              {deletingId === f.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Trash2 className="w-3.5 h-3.5" />
+                              }
+                            </button>
+                          </div>
                         </td>
                       </motion.tr>
                     )
@@ -557,6 +613,121 @@ export default function AdminFranchiseesPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════ MODAL : Confirmation suppression franchisé ═══════ */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => { if (!deletingId) { setDeleteTarget(null); setDeleteConfirmText(''); setDeleteError(null) } }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl"
+            >
+              {/* Header rouge */}
+              <div className="bg-gradient-to-r from-[#EF4444] to-[#DC2626] p-5 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-[17px] font-bold">Supprimer ce franchisé ?</h3>
+                    <p className="text-[12px] text-white/80 mt-0.5">Action irréversible</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-4">
+                <div className="bg-[#FEF3C7] border-l-4 border-[#F59E0B] rounded-r-lg px-4 py-3">
+                  <p className="text-[13px] text-[#92400E] leading-relaxed">
+                    <strong>Cette action est définitive.</strong> Seront supprimés :
+                  </p>
+                  <ul className="text-[12px] text-[#92400E] mt-2 space-y-0.5 list-disc list-inside">
+                    <li>Le compte utilisateur et son profil</li>
+                    <li>Toutes ses commandes + items</li>
+                    <li>Ses clients CRM + notes + pipeline</li>
+                    <li>Ses leads et campagnes pub</li>
+                    <li>Ses abonnements Stripe actifs</li>
+                    <li>Ses tickets support + notifications</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-[13px] text-[#374151]">
+                    Franchisé à supprimer :
+                  </p>
+                  <div className="bg-[#F5F7FA] border border-[#E2E8F2] rounded-lg px-3 py-2.5">
+                    <p className="text-[14px] font-bold text-[#2d2d60]">
+                      {deleteTarget.company_name || `${deleteTarget.first_name} ${deleteTarget.last_name}`}
+                    </p>
+                    <p className="text-[12px] text-[#6B7280] font-mono">{deleteTarget.email}</p>
+                    <p className="text-[11px] text-[#9CA3AF] font-mono mt-0.5">{deleteTarget.franchise_code}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">
+                    Pour confirmer, retapez l&apos;email exact
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={e => { setDeleteConfirmText(e.target.value); setDeleteError(null) }}
+                    placeholder={deleteTarget.email}
+                    disabled={!!deletingId}
+                    className="w-full px-3 py-2 rounded-lg border border-[#E2E8F2] bg-white text-[14px] text-[#2d2d60] font-mono outline-none focus:border-[#EF4444] focus:ring-2 focus:ring-[#EF4444]/15 disabled:opacity-50"
+                  />
+                </div>
+
+                {deleteError && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/25">
+                    <AlertCircle className="w-4 h-4 text-[#EF4444] flex-shrink-0 mt-0.5" />
+                    <p className="text-[12px] text-[#B91C1C] leading-relaxed">{deleteError}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 px-6 py-4 bg-[#F8FAFC] border-t border-[#E2E8F2]">
+                <button
+                  onClick={() => { setDeleteTarget(null); setDeleteConfirmText(''); setDeleteError(null) }}
+                  disabled={!!deletingId}
+                  className="px-4 py-2 rounded-lg text-[13px] font-medium text-[#2d2d60] hover:bg-[#E2E8F2] transition-colors disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={
+                    !!deletingId ||
+                    deleteConfirmText.trim().toLowerCase() !==
+                      (deleteTarget.email || '').trim().toLowerCase()
+                  }
+                  className={cn(
+                    'flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-all',
+                    'bg-gradient-to-r from-[#EF4444] to-[#DC2626] hover:brightness-110',
+                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                  )}
+                >
+                  {deletingId ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Suppression…</>
+                  ) : (
+                    <><Trash2 className="w-3.5 h-3.5" /> Supprimer définitivement</>
+                  )}
+                </button>
               </div>
             </motion.div>
           </motion.div>
