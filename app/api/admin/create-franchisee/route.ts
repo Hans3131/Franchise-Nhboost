@@ -126,27 +126,167 @@ export async function POST(req: NextRequest) {
           auth: { user: gmailUser, pass: gmailPass },
         })
 
+        // URL du portail (pour le CTA "Se connecter")
+        const appUrl = (
+          process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        ).replace(/\/$/, '')
+        const loginUrl = `${appUrl}/login`
+        const supportEmail = process.env.SUPPORT_EMAIL || 'support@nhboost.com'
+
         await transporter.sendMail({
           from: `"NHBoost" <${gmailUser}>`,
           to: email,
-          subject: 'Bienvenue sur NHBoost — Vos accès franchisé',
-          html: `
-            <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px">
-              <h2 style="color:#2d2d60">Bienvenue chez NHBoost !</h2>
-              <p>Bonjour <strong>${escapeHtml(first_name)}</strong>,</p>
-              <p>Votre compte franchisé a été créé. Voici vos identifiants :</p>
-              <div style="background:#F5F7FA;border:1px solid #E2E8F2;border-radius:12px;padding:16px;margin:16px 0">
-                <p style="margin:4px 0"><strong>Email :</strong> ${escapeHtml(email)}</p>
-                <p style="margin:4px 0"><strong>Mot de passe :</strong> ${escapeHtml(password)}</p>
-                <p style="margin:4px 0"><strong>Code franchise :</strong> ${escapeHtml(code)}</p>
-              </div>
-              <p>Connectez-vous sur votre portail et changez votre mot de passe dans les paramètres.</p>
-              <p style="color:#6B7280;font-size:12px;margin-top:20px">— L'équipe NHBoost</p>
-            </div>
-          `,
+          subject: '🎉 Bienvenue chez NHBoost — Votre espace franchisé est prêt',
+          // Version texte pour les clients mail qui ne lisent pas le HTML
+          text: [
+            `Bonjour ${first_name},`,
+            '',
+            'Félicitations — vous venez d\'être ajouté en tant que franchisé chez NHBoost.',
+            'Votre espace personnel vous attend : commandes, CRM clients, leads, budget pub,',
+            'analytics et bien plus. Tout est déjà configuré.',
+            '',
+            'Voici vos identifiants :',
+            `  • Email       : ${email}`,
+            `  • Mot de passe : ${password}`,
+            `  • Code franchise : ${code}`,
+            '',
+            `Se connecter : ${loginUrl}`,
+            '',
+            'Pensez à changer votre mot de passe dès votre première connexion,',
+            'depuis Paramètres > Sécurité.',
+            '',
+            `Besoin d'aide ? ${supportEmail}`,
+            '',
+            '— L\'équipe NHBoost',
+          ].join('\n'),
+          html: `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background-color:#F5F7FA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F5F7FA;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(45,45,96,0.08);">
+
+            <!-- Header gradient -->
+            <tr>
+              <td style="background:linear-gradient(135deg,#2d2d60 0%,#4A7DC4 60%,#6AAEE5 100%);padding:40px 40px 32px;text-align:center;">
+                <div style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:#FFFFFF;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:6px 14px;border-radius:20px;margin-bottom:20px;">
+                  NHBoost · Portail franchisé
+                </div>
+                <h1 style="margin:0;color:#FFFFFF;font-size:28px;font-weight:700;line-height:1.2;">
+                  🎉 Bienvenue ${escapeHtml(first_name)} !
+                </h1>
+                <p style="margin:12px 0 0;color:rgba(255,255,255,0.85);font-size:15px;line-height:1.5;">
+                  Vous venez d'être ajouté en tant que franchisé chez NHBoost
+                </p>
+              </td>
+            </tr>
+
+            <!-- Body -->
+            <tr>
+              <td style="padding:36px 40px 12px;">
+                <p style="margin:0 0 16px;color:#2d2d60;font-size:15px;line-height:1.6;">
+                  Bonjour <strong>${escapeHtml(first_name)} ${escapeHtml(last_name)}</strong>,
+                </p>
+                <p style="margin:0 0 16px;color:#4A5180;font-size:14px;line-height:1.7;">
+                  Nous sommes ravis de vous compter parmi les franchisés NHBoost. Votre espace
+                  personnel est désormais actif et vous permet de gérer :
+                </p>
+                <ul style="margin:0 0 24px;padding:0 0 0 20px;color:#4A5180;font-size:14px;line-height:1.9;">
+                  <li>Vos commandes de services avec paiement sécurisé</li>
+                  <li>Votre CRM clients et votre pipeline commercial</li>
+                  <li>Les leads entrants automatiquement assignés</li>
+                  <li>Votre budget publicitaire et vos campagnes</li>
+                  <li>Les formations de l'académie NHBoost</li>
+                </ul>
+              </td>
+            </tr>
+
+            <!-- Credentials card -->
+            <tr>
+              <td style="padding:0 40px;">
+                <div style="background:linear-gradient(135deg,rgba(106,174,229,0.08) 0%,rgba(43,53,128,0.05) 100%);border:1px solid rgba(106,174,229,0.25);border-radius:12px;padding:24px;">
+                  <p style="margin:0 0 14px;color:#2d2d60;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">
+                    🔑 Vos identifiants
+                  </p>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:'SF Mono',Menlo,Consolas,monospace;">
+                    <tr>
+                      <td style="padding:8px 0;color:#8B95C4;font-size:12px;width:140px;">Email</td>
+                      <td style="padding:8px 0;color:#2d2d60;font-size:14px;font-weight:600;word-break:break-all;">${escapeHtml(email)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:8px 0;color:#8B95C4;font-size:12px;border-top:1px dashed rgba(106,174,229,0.2);">Mot de passe</td>
+                      <td style="padding:8px 0;color:#2d2d60;font-size:14px;font-weight:600;border-top:1px dashed rgba(106,174,229,0.2);word-break:break-all;">${escapeHtml(password)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:8px 0;color:#8B95C4;font-size:12px;border-top:1px dashed rgba(106,174,229,0.2);">Code franchise</td>
+                      <td style="padding:8px 0;color:#2d2d60;font-size:14px;font-weight:600;border-top:1px dashed rgba(106,174,229,0.2);">${escapeHtml(code)}</td>
+                    </tr>
+                  </table>
+                </div>
+              </td>
+            </tr>
+
+            <!-- CTA button -->
+            <tr>
+              <td style="padding:28px 40px;text-align:center;">
+                <a href="${loginUrl}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#2d2d60 0%,#4A7DC4 100%);color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;border-radius:10px;box-shadow:0 4px 12px rgba(45,45,96,0.25);">
+                  Accéder à mon espace →
+                </a>
+                <p style="margin:14px 0 0;color:#8B95C4;font-size:11px;">
+                  ou copiez ce lien : <a href="${loginUrl}" style="color:#6AAEE5;text-decoration:none;">${loginUrl}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Security tip -->
+            <tr>
+              <td style="padding:0 40px 12px;">
+                <div style="background:#FEF3C7;border-left:3px solid #F59E0B;padding:14px 16px;border-radius:6px;">
+                  <p style="margin:0;color:#92400E;font-size:13px;line-height:1.5;">
+                    <strong>⚠ Sécurité :</strong> par précaution, nous vous invitons à modifier votre
+                    mot de passe dès votre première connexion, depuis <em>Paramètres → Sécurité</em>.
+                  </p>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Support -->
+            <tr>
+              <td style="padding:24px 40px 36px;border-top:1px solid #E2E8F2;">
+                <p style="margin:0 0 8px;color:#4A5180;font-size:13px;line-height:1.6;">
+                  Une question, un souci ? L'équipe NHBoost est à votre disposition.
+                </p>
+                <p style="margin:0;color:#8B95C4;font-size:12px;">
+                  📧 <a href="mailto:${supportEmail}" style="color:#6AAEE5;text-decoration:none;">${escapeHtml(supportEmail)}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding:20px 40px;background:#F8FAFC;text-align:center;">
+                <p style="margin:0;color:#8B95C4;font-size:11px;line-height:1.5;">
+                  © ${new Date().getFullYear()} NHBoost · Réseau de franchisés<br>
+                  Cet email a été envoyé automatiquement à ${escapeHtml(email)}<br>
+                  suite à la création de votre compte franchisé.
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
         })
       }
-    } catch { /* email best-effort */ }
+    } catch (e) {
+      console.error('[create-franchisee] email send failed (best-effort):', e)
+      /* email best-effort — on ne bloque pas la création */
+    }
 
     // ─── 6. Réponse (SANS mot de passe) ───────────────────
     return NextResponse.json({
