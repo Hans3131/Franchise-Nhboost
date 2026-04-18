@@ -22,6 +22,7 @@ import {
   Megaphone,
   X,
   ChevronRight,
+  ChevronDown,
   Settings,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -90,6 +91,37 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     name: 'Franchisé #001', email: 'franchise@nhboost.com', initials: 'F1',
   })
 
+  // ─── État d'ouverture des sections (accordion) ─────────────
+  // Par défaut toutes fermées. Ouverture automatique de la section
+  // contenant la page active pour que l'utilisateur voie sa position.
+  const [openSections, setOpenSections] = useState<Set<string>>(() => {
+    // Initialisation côté serveur/client : ouvre la section de la page active
+    const activeSection = NAV_SECTIONS.find(s =>
+      s.items.some(item => pathname === item.href || pathname.startsWith(item.href + '/')),
+    )
+    return new Set(activeSection ? [activeSection.key] : [])
+  })
+
+  // Si on navigue vers une page dans une section fermée → l'ouvrir auto
+  useEffect(() => {
+    const activeSection = NAV_SECTIONS.find(s =>
+      s.items.some(item => pathname === item.href || pathname.startsWith(item.href + '/')),
+    )
+    if (activeSection && !openSections.has(activeSection.key)) {
+      setOpenSections(prev => new Set(prev).add(activeSection.key))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
+  const toggleSection = (key: string) => {
+    setOpenSections(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -124,86 +156,134 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         </button>
       </div>
 
-      {/* Nav — organisée en 3 sections avec couleur par catégorie */}
+      {/* Nav — accordion par section avec couleur par catégorie */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        {NAV_SECTIONS.map((section, sectionIdx) => (
-          <div
-            key={section.key}
-            className={cn(sectionIdx > 0 && 'mt-5')}
-          >
-            {/* Section label */}
-            <div className="flex items-center gap-2 px-3 pb-2">
-              <span
-                className="w-1 h-3 rounded-full"
-                style={{ background: section.color }}
-              />
-              <span
-                className="text-[10px] font-bold uppercase tracking-widest"
-                style={{ color: section.color }}
+        {NAV_SECTIONS.map((section, sectionIdx) => {
+          const isOpen = openSections.has(section.key)
+          // Y a-t-il un item actif dans cette section ?
+          const hasActive = section.items.some(
+            item => pathname === item.href || pathname.startsWith(item.href + '/'),
+          )
+          return (
+            <div
+              key={section.key}
+              className={cn(sectionIdx > 0 && 'mt-3')}
+            >
+              {/* Section header (clickable toggle) */}
+              <button
+                type="button"
+                onClick={() => toggleSection(section.key)}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors',
+                  'hover:bg-[rgba(107,174,229,0.04)]',
+                )}
+                aria-expanded={isOpen}
+                aria-controls={`section-${section.key}`}
               >
-                {section.label}
-              </span>
-            </div>
+                <span
+                  className="w-1 h-3 rounded-full flex-shrink-0"
+                  style={{ background: section.color }}
+                />
+                <span
+                  className="text-[10px] font-bold uppercase tracking-widest flex-1 text-left"
+                  style={{ color: section.color }}
+                >
+                  {section.label}
+                </span>
+                {/* Badge si une page est active dans une section fermée */}
+                {!isOpen && hasActive && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse"
+                    style={{ background: section.color }}
+                    aria-label="Page active dans cette section"
+                  />
+                )}
+                <motion.div
+                  animate={{ rotate: isOpen ? 0 : -90 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                >
+                  <ChevronDown
+                    className="w-3.5 h-3.5 flex-shrink-0"
+                    style={{ color: section.color, opacity: 0.7 }}
+                    strokeWidth={2}
+                  />
+                </motion.div>
+              </button>
 
-            {/* Items */}
-            <div className="space-y-0.5">
-              {section.items.map(({ href, label, icon: Icon }) => {
-                const active = pathname === href || pathname.startsWith(href + '/')
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={onClose}
-                    className={cn(
-                      'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative',
-                      !active && 'text-[#8B95C4] hover:text-[#F0F2FF]',
-                    )}
-                    style={
-                      active
-                        ? { background: section.bgColor, color: section.color }
-                        : undefined
-                    }
-                    onMouseEnter={(e) => {
-                      if (!active) {
-                        e.currentTarget.style.background = section.bgColor.replace('0.12', '0.06')
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!active) {
-                        e.currentTarget.style.background = ''
-                      }
-                    }}
+              {/* Items (accordion body) */}
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    key={`section-${section.key}`}
+                    id={`section-${section.key}`}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                    className="overflow-hidden"
                   >
-                    {/* Active indicator bar */}
-                    {active && (
-                      <motion.div
-                        key={`indicator-${href}`}
-                        layoutId="sidebar-active"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
-                        style={{ background: section.color }}
-                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                      />
-                    )}
-                    <Icon
-                      className="w-[18px] h-[18px] flex-shrink-0 transition-colors"
-                      style={{
-                        color: active ? section.color : '#4A5180',
-                      }}
-                      strokeWidth={active ? 2 : 1.75}
-                    />
-                    <span>{label}</span>
-                    {active && (
-                      <ChevronRight
-                        className="w-3.5 h-3.5 ml-auto opacity-60"
-                        style={{ color: section.color }}
-                      />
-                    )}
-                  </Link>
-                )
-              })}
+                    <div className="space-y-0.5 pt-1 pb-1">
+                      {section.items.map(({ href, label, icon: Icon }) => {
+                        const active = pathname === href || pathname.startsWith(href + '/')
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={onClose}
+                            className={cn(
+                              'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative',
+                              !active && 'text-[#8B95C4] hover:text-[#F0F2FF]',
+                            )}
+                            style={
+                              active
+                                ? { background: section.bgColor, color: section.color }
+                                : undefined
+                            }
+                            onMouseEnter={(e) => {
+                              if (!active) {
+                                e.currentTarget.style.background = section.bgColor.replace('0.12', '0.06')
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!active) {
+                                e.currentTarget.style.background = ''
+                              }
+                            }}
+                          >
+                            {/* Active indicator bar */}
+                            {active && (
+                              <motion.div
+                                key={`indicator-${href}`}
+                                layoutId="sidebar-active"
+                                className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
+                                style={{ background: section.color }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                              />
+                            )}
+                            <Icon
+                              className="w-[18px] h-[18px] flex-shrink-0 transition-colors"
+                              style={{
+                                color: active ? section.color : '#4A5180',
+                              }}
+                              strokeWidth={active ? 2 : 1.75}
+                            />
+                            <span>{label}</span>
+                            {active && (
+                              <ChevronRight
+                                className="w-3.5 h-3.5 ml-auto opacity-60"
+                                style={{ color: section.color }}
+                              />
+                            )}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </nav>
 
       {/* Footer */}
