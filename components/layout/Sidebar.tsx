@@ -27,21 +27,56 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
-const NAV_ITEMS = [
-  { href: '/dashboard',  label: 'Tableau de bord', icon: LayoutDashboard },
-  { href: '/catalogue',  label: 'Catalogue',        icon: ShoppingBag },
-  { href: '/commander',  label: 'Commander',        icon: ShoppingCart },
-  { href: '/secretaire', label: 'Secrétaire IA',    icon: Bot },
-  { href: '/crm',        label: 'Mes clients',      icon: Users },
-  { href: '/pipeline',   label: 'Pipeline',         icon: Kanban },
-  { href: '/mes-leads',  label: 'Mes leads',        icon: Inbox },
-  { href: '/commandes',  label: 'Mes commandes',    icon: ClipboardList },
-  { href: '/budget-ads', label: 'Budget ADS',       icon: Megaphone },
-  { href: '/projets',    label: 'Projets',          icon: FolderOpen },
-  { href: '/analytics',  label: 'Analytics',        icon: BarChart3 },
-  { href: '/academie',  label: 'Académie',         icon: GraduationCap },
-  { href: '/support',    label: 'Support',          icon: HeadphonesIcon },
-  { href: '/ressources', label: 'Ressources',       icon: BookOpen },
+// ─── Navigation hiérarchisée en 3 sections ─────────────────────
+// Chaque section a sa propre couleur d'accent
+type NavItem = { href: string; label: string; icon: React.ElementType }
+type NavSection = {
+  key: string
+  label: string
+  color: string       // Couleur principale (icônes actives, barre, label section)
+  bgColor: string     // Rgba pour fond hover/active
+  items: NavItem[]
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    key: 'operations',
+    label: 'Opérations',
+    color: '#6AAEE5',                    // Bleu NHBoost — cœur de métier
+    bgColor: 'rgba(106,174,229,0.12)',
+    items: [
+      { href: '/dashboard',  label: 'Tableau de bord', icon: LayoutDashboard },
+      { href: '/commander',  label: 'Commander',       icon: ShoppingCart },
+      { href: '/commandes',  label: 'Mes commandes',   icon: ClipboardList },
+      { href: '/crm',        label: 'Mes clients',     icon: Users },
+      { href: '/budget-ads', label: 'Budget ADS',      icon: Megaphone },
+      { href: '/secretaire', label: 'Secrétaire IA',   icon: Bot },
+    ],
+  },
+  {
+    key: 'commercial',
+    label: 'Commercial',
+    color: '#F59E0B',                    // Orange — conversion & funnel
+    bgColor: 'rgba(245,158,11,0.12)',
+    items: [
+      { href: '/pipeline',  label: 'Pipeline',  icon: Kanban },
+      { href: '/mes-leads', label: 'Mes leads', icon: Inbox },
+    ],
+  },
+  {
+    key: 'resources',
+    label: 'Ressources & outils',
+    color: '#8B5CF6',                    // Violet — contenu, formation, support
+    bgColor: 'rgba(139,92,246,0.12)',
+    items: [
+      { href: '/projets',    label: 'Projets',    icon: FolderOpen },
+      { href: '/analytics',  label: 'Analytics',  icon: BarChart3 },
+      { href: '/academie',   label: 'Académie',   icon: GraduationCap },
+      { href: '/catalogue',  label: 'Catalogue',  icon: ShoppingBag },
+      { href: '/support',    label: 'Support',    icon: HeadphonesIcon },
+      { href: '/ressources', label: 'Ressources', icon: BookOpen },
+    ],
+  },
 ]
 
 interface SidebarProps {
@@ -89,45 +124,86 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         </button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/')
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onClose}
-              className={cn(
-                'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative',
-                active
-                  ? 'bg-[rgba(106,174,229,0.12)] text-[#6AAEE5]'
-                  : 'text-[#8B95C4] hover:text-[#F0F2FF] hover:bg-[rgba(107,174,229,0.06)]'
-              )}
-            >
-              {/* Active indicator — uses key to force remount on route change */}
-              {active && (
-                <motion.div
-                  key={`indicator-${href}`}
-                  layoutId="sidebar-active"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full bg-[#6AAEE5]"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <Icon
-                className={cn(
-                  'w-[18px] h-[18px] flex-shrink-0 transition-colors',
-                  active ? 'text-[#6AAEE5]' : 'text-[#4A5180] group-hover:text-[#8B95C4]'
-                )}
-                strokeWidth={active ? 2 : 1.75}
+      {/* Nav — organisée en 3 sections avec couleur par catégorie */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        {NAV_SECTIONS.map((section, sectionIdx) => (
+          <div
+            key={section.key}
+            className={cn(sectionIdx > 0 && 'mt-5')}
+          >
+            {/* Section label */}
+            <div className="flex items-center gap-2 px-3 pb-2">
+              <span
+                className="w-1 h-3 rounded-full"
+                style={{ background: section.color }}
               />
-              <span>{label}</span>
-              {active && (
-                <ChevronRight className="w-3.5 h-3.5 ml-auto text-[#6AAEE5] opacity-60" />
-              )}
-            </Link>
-          )
-        })}
+              <span
+                className="text-[10px] font-bold uppercase tracking-widest"
+                style={{ color: section.color }}
+              >
+                {section.label}
+              </span>
+            </div>
+
+            {/* Items */}
+            <div className="space-y-0.5">
+              {section.items.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href || pathname.startsWith(href + '/')
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={onClose}
+                    className={cn(
+                      'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative',
+                      !active && 'text-[#8B95C4] hover:text-[#F0F2FF]',
+                    )}
+                    style={
+                      active
+                        ? { background: section.bgColor, color: section.color }
+                        : undefined
+                    }
+                    onMouseEnter={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = section.bgColor.replace('0.12', '0.06')
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = ''
+                      }
+                    }}
+                  >
+                    {/* Active indicator bar */}
+                    {active && (
+                      <motion.div
+                        key={`indicator-${href}`}
+                        layoutId="sidebar-active"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
+                        style={{ background: section.color }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                      />
+                    )}
+                    <Icon
+                      className="w-[18px] h-[18px] flex-shrink-0 transition-colors"
+                      style={{
+                        color: active ? section.color : '#4A5180',
+                      }}
+                      strokeWidth={active ? 2 : 1.75}
+                    />
+                    <span>{label}</span>
+                    {active && (
+                      <ChevronRight
+                        className="w-3.5 h-3.5 ml-auto opacity-60"
+                        style={{ color: section.color }}
+                      />
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Footer */}
