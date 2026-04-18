@@ -47,6 +47,7 @@ interface FormData {
   companyName:    string
   companyEmail:   string
   sector:         string
+  country:        string  // 'BE' | 'FR' | 'LU' | 'CH' | 'OTHER'
   // Présence en ligne
   vatNumber:      string
   website:        string
@@ -93,6 +94,21 @@ const SECTORS = [
   'Technologie / Digital', 'Association / ONG', 'Autre',
 ]
 
+// ─── TVA ──────────────────────────────────────────────────────
+// Belgique : 21% · Hors Belgique : 0% (pas de TVA intracommunautaire
+// ni hors UE pour un indépendant / société belge non assujettie)
+const COUNTRIES: { code: string; label: string; flag: string; vatRate: number }[] = [
+  { code: 'BE',    label: 'Belgique',        flag: '🇧🇪', vatRate: 0.21 },
+  { code: 'FR',    label: 'France',          flag: '🇫🇷', vatRate: 0 },
+  { code: 'LU',    label: 'Luxembourg',      flag: '🇱🇺', vatRate: 0 },
+  { code: 'CH',    label: 'Suisse',          flag: '🇨🇭', vatRate: 0 },
+  { code: 'OTHER', label: 'Autre pays',      flag: '🌍', vatRate: 0 },
+]
+
+function getVatRate(countryCode: string | undefined): number {
+  return COUNTRIES.find(c => c.code === countryCode)?.vatRate ?? 0
+}
+
 // ─── Schemas ──────────────────────────────────────────────────
 const step1Schema = z.object({
   clientName:   z.string().min(2, 'Nom client requis (min. 2 caractères)'),
@@ -102,6 +118,7 @@ const step1Schema = z.object({
   companyName:  z.string().min(2, 'Nom entreprise requis (min. 2 caractères)'),
   companyEmail: z.string().email('Email entreprise invalide').optional().or(z.literal('')),
   sector:       z.string().optional(),
+  country:      z.enum(['BE', 'FR', 'LU', 'CH', 'OTHER'], { message: 'Pays requis' }),
   // Présence en ligne — tous facultatifs
   vatNumber:    z.string().optional().or(z.literal('')),
   website:      z.string().url('URL invalide (ex: https://mon-site.com)').optional().or(z.literal('')),
@@ -211,7 +228,11 @@ export default function CommanderPage() {
     setData(d => ({ ...d, serviceId: d.serviceId || svcId }))
   }, [])
 
-  const form1 = useForm({ resolver: zodResolver(step1Schema), mode: 'onBlur' })
+  const form1 = useForm({
+    resolver: zodResolver(step1Schema),
+    mode: 'onBlur',
+    defaultValues: { country: 'BE' as const },
+  })
   const form3 = useForm({ resolver: zodResolver(step3Schema), mode: 'onBlur' })
 
   const go = useCallback((dir: 1 | -1) => {
@@ -487,7 +508,10 @@ export default function CommanderPage() {
       const checkoutRes = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: supabaseOrderId }),
+        body: JSON.stringify({
+          order_id: supabaseOrderId,
+          country: data.country ?? 'BE',
+        }),
       })
       const checkoutData = await checkoutRes.json()
 
@@ -536,17 +560,20 @@ export default function CommanderPage() {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: paymentError.orderId }),
+        body: JSON.stringify({
+          order_id: paymentError.orderId,
+          country: data.country ?? 'BE',
+        }),
       })
-      const data = await res.json()
-      if (res.ok && data.url) {
-        window.location.href = data.url
+      const result = await res.json()
+      if (res.ok && result.url) {
+        window.location.href = result.url
         return
       }
       setSubmitting(false)
       setPaymentError({
         ...paymentError,
-        message: data.error ?? 'Nouvelle tentative échouée.',
+        message: result.error ?? 'Nouvelle tentative échouée.',
       })
     } catch (e) {
       setSubmitting(false)
@@ -774,6 +801,46 @@ export default function CommanderPage() {
                           {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
+                    </FieldWrapper>
+                  </div>
+
+                  {/* Pays — détermine la TVA applicable */}
+                  <div className="mt-4">
+                    <FieldWrapper
+                      label="Pays du client *"
+                      error={form1.formState.errors.country?.message}
+                      info="Détermine la TVA : 21% en Belgique, 0% hors Belgique."
+                    >
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                        {COUNTRIES.map((c) => {
+                          const selected = form1.watch('country') === c.code
+                          return (
+                            <button
+                              key={c.code}
+                              type="button"
+                              onClick={() => form1.setValue('country', c.code as 'BE' | 'FR' | 'LU' | 'CH' | 'OTHER', { shouldValidate: true })}
+                              className={cn(
+                                'flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left',
+                                selected
+                                  ? 'bg-[#6AAEE5]/10 border-[#6AAEE5] text-[#2d2d60] shadow-sm'
+                                  : 'bg-[#F5F7FA] border-[#E2E8F2] text-[#6B7280] hover:border-[#6AAEE5]/40 hover:bg-white',
+                              )}
+                            >
+                              <span className="text-base leading-none">{c.flag}</span>
+                              <div className="min-w-0 flex-1">
+                                <p className={cn('text-[12px] font-semibold truncate', selected ? 'text-[#2d2d60]' : 'text-[#374151]')}>
+                                  {c.label}
+                                </p>
+                                <p className={cn('text-[10px] font-mono', selected ? 'text-[#6AAEE5]' : 'text-[#9CA3AF]')}>
+                                  TVA {(c.vatRate * 100).toFixed(0)}%
+                                </p>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {/* Hidden register pour validation Zod */}
+                      <input type="hidden" {...form1.register('country')} />
                     </FieldWrapper>
                   </div>
                 </div>
@@ -1264,48 +1331,91 @@ Accès hébergement / CMS : .....`}
                 <StepHeader icon={CreditCard} color="#22C55E" title="Mode de paiement"
                   subtitle="Choisissez comment régler cette commande. Les prix ont déjà été définis ligne par ligne." />
 
-                {/* Rappel : total de la commande */}
-                <div className="rounded-2xl bg-gradient-to-br from-[#F8FAFC] to-white border border-[#E2E8F2] p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] mb-3">
-                    Montant à régler · {lines.length} ligne{lines.length > 1 ? 's' : ''}
-                  </p>
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-[28px] font-bold text-[#2d2d60] font-mono tabular-nums leading-none">
-                        {formatPrice(linesTotals.real)}
-                      </p>
-                      <p className="text-[11px] text-[#9CA3AF] mt-1">
-                        Bénéfice réel : <span className="font-semibold text-[#22C55E]">{formatPrice(linesTotals.profit)}</span>
-                      </p>
-                    </div>
-                    {Math.abs(linesTotals.variance) >= 0.5 && (
-                      <div
-                        className="flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold"
-                        style={{
-                          background: linesTotals.variance > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
-                          color: linesTotals.variance > 0 ? '#EF4444' : '#22C55E',
-                        }}
-                      >
-                        {linesTotals.variance > 0 ? '−' : '+'}{formatPrice(Math.abs(linesTotals.variance))} vs conseil
+                {/* Rappel : total HT / TVA / TTC ─────────── */}
+                {(() => {
+                  const vatRate = getVatRate(data.country)
+                  const ht = linesTotals.real
+                  const vat = ht * vatRate
+                  const ttc = ht + vat
+                  const country = COUNTRIES.find(c => c.code === data.country)
+                  return (
+                    <div className="rounded-2xl bg-gradient-to-br from-[#F8FAFC] to-white border border-[#E2E8F2] p-5">
+                      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF]">
+                          Montant à régler · {lines.length} ligne{lines.length > 1 ? 's' : ''}
+                        </p>
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#6AAEE5]/10 border border-[#6AAEE5]/25 text-[10px] font-semibold text-[#2d2d60]">
+                          <span>{country?.flag ?? '🌍'}</span>
+                          <span>{country?.label ?? 'Pays'}</span>
+                          <span className="text-[#6AAEE5] font-mono">· TVA {(vatRate * 100).toFixed(0)}%</span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Modes de paiement */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <PaymentCard mode="one-shot" selected={data.paymentMode === 'one-shot'}
-                    onSelect={() => setData(d => ({ ...d, paymentMode: 'one-shot' }))}
-                    icon={Zap} title="Paiement unique"
-                    description="Réglez la totalité en une fois. Accès immédiat dès confirmation."
-                    price={formatPrice(linesTotals.real)} badge="Ponctuel" badgeColor="#6AAEE5" />
-                  <PaymentCard mode="subscription" selected={data.paymentMode === 'subscription'}
-                    onSelect={() => setData(d => ({ ...d, paymentMode: 'subscription' }))}
-                    icon={CreditCard} title="Abonnement mensuel"
-                    description="Étalez le paiement mois par mois. Résiliable à tout moment."
-                    price={`${formatPrice(Math.ceil(linesTotals.real / 3))}/mois`}
-                    badge="Récurrent" badgeColor="#22C55E" />
-                </div>
+                      {/* Breakdown HT / TVA / TTC */}
+                      <div className="space-y-2 mb-4 pb-4 border-b border-[#E2E8F2]">
+                        <div className="flex justify-between text-[13px]">
+                          <span className="text-[#6B7280]">Sous-total HT</span>
+                          <span className="font-semibold text-[#2d2d60] font-mono tabular-nums">{formatPrice(ht)}</span>
+                        </div>
+                        <div className="flex justify-between text-[13px]">
+                          <span className="text-[#6B7280]">TVA ({(vatRate * 100).toFixed(0)}%)</span>
+                          <span className={cn(
+                            'font-semibold font-mono tabular-nums',
+                            vatRate > 0 ? 'text-[#2d2d60]' : 'text-[#9CA3AF]'
+                          )}>
+                            {formatPrice(vat)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Total TTC en gros */}
+                      <div className="flex items-end justify-between gap-4">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#6AAEE5] mb-0.5">
+                            Total TTC
+                          </p>
+                          <p className="text-[28px] font-bold text-[#2d2d60] font-mono tabular-nums leading-none">
+                            {formatPrice(ttc)}
+                          </p>
+                          <p className="text-[11px] text-[#9CA3AF] mt-1">
+                            Bénéfice réel (HT) : <span className="font-semibold text-[#22C55E]">{formatPrice(linesTotals.profit)}</span>
+                          </p>
+                        </div>
+                        {Math.abs(linesTotals.variance) >= 0.5 && (
+                          <div
+                            className="flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold flex-shrink-0"
+                            style={{
+                              background: linesTotals.variance > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+                              color: linesTotals.variance > 0 ? '#EF4444' : '#22C55E',
+                            }}
+                          >
+                            {linesTotals.variance > 0 ? '−' : '+'}{formatPrice(Math.abs(linesTotals.variance))} vs conseil
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Modes de paiement — montants TTC */}
+                {(() => {
+                  const ttc = linesTotals.real * (1 + getVatRate(data.country))
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <PaymentCard mode="one-shot" selected={data.paymentMode === 'one-shot'}
+                        onSelect={() => setData(d => ({ ...d, paymentMode: 'one-shot' }))}
+                        icon={Zap} title="Paiement unique"
+                        description="Réglez la totalité en une fois. Accès immédiat dès confirmation."
+                        price={`${formatPrice(ttc)} TTC`} badge="Ponctuel" badgeColor="#6AAEE5" />
+                      <PaymentCard mode="subscription" selected={data.paymentMode === 'subscription'}
+                        onSelect={() => setData(d => ({ ...d, paymentMode: 'subscription' }))}
+                        icon={CreditCard} title="Abonnement mensuel"
+                        description="Étalez le paiement mois par mois. Résiliable à tout moment."
+                        price={`${formatPrice(Math.ceil(ttc / 3))}/mois TTC`}
+                        badge="Récurrent" badgeColor="#22C55E" />
+                    </div>
+                  )
+                })()}
 
                 <NavButtons
                   onNext={() => { if (data.paymentMode) go(1) }}
@@ -1392,10 +1502,28 @@ Accès hébergement / CMS : .....`}
                     })}
                   </div>
                   <SummaryRow label="Paiement" value={data.paymentMode === 'subscription' ? 'Abonnement mensuel' : 'Paiement unique'} />
-                  <SummaryRow label="CA théorique total" value={formatPrice(linesTotals.theoretical)} />
-                  <SummaryRow label="Coût total" value={formatPrice(linesTotals.cost)} />
-                  <SummaryRow label="Bénéfice réel" value={formatPrice(linesTotals.profit)} />
-                  <SummaryRow label="Total facturé" value={formatPrice(linesTotals.real)} highlight />
+                  {(() => {
+                    const country = COUNTRIES.find(c => c.code === data.country)
+                    const vatRate = getVatRate(data.country)
+                    const ht = linesTotals.real
+                    const vat = ht * vatRate
+                    const ttc = ht + vat
+                    return (
+                      <>
+                        <SummaryRow
+                          label="Pays (TVA)"
+                          value={`${country?.flag ?? '🌍'} ${country?.label ?? '—'} · ${(vatRate * 100).toFixed(0)}%`}
+                        />
+                        <SummaryRow label="CA théorique total" value={formatPrice(linesTotals.theoretical)} />
+                        <SummaryRow label="Coût total" value={formatPrice(linesTotals.cost)} />
+                        <SummaryRow label="Bénéfice réel (HT)" value={formatPrice(linesTotals.profit)} />
+                        <div className="h-px bg-[#E2E8F2] my-2" />
+                        <SummaryRow label="Sous-total HT" value={formatPrice(ht)} />
+                        <SummaryRow label={`TVA ${(vatRate * 100).toFixed(0)}%`} value={formatPrice(vat)} />
+                        <SummaryRow label="Total TTC à régler" value={formatPrice(ttc)} highlight />
+                      </>
+                    )
+                  })()}
 
                   {/* Brief */}
                   {data.brief && (

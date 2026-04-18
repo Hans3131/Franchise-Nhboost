@@ -14,6 +14,22 @@ export const dynamic = 'force-dynamic'
 
 interface RequestBody {
   order_id: string
+  /** Code pays ISO-2. Détermine la TVA : BE=21%, autres=0% */
+  country?: 'BE' | 'FR' | 'LU' | 'CH' | 'OTHER' | string
+}
+
+// Taux TVA par pays (aligné sur lib COUNTRIES du commander)
+const VAT_RATES: Record<string, number> = {
+  BE: 0.21,
+  FR: 0,
+  LU: 0,
+  CH: 0,
+  OTHER: 0,
+}
+
+function getVatRate(country?: string): number {
+  if (!country) return 0
+  return VAT_RATES[country] ?? 0
 }
 
 export async function POST(req: Request) {
@@ -71,7 +87,7 @@ export async function POST(req: Request) {
       )
     }
 
-    // ─── 5. Construction des line_items (montants en centimes) ─
+    // ─── 5. Construction des line_items HT (montants en centimes) ─
     const lineItems = items.map((item) => {
       const unitAmount = Math.round(Number(item.unit_actual_price) * 100)
       if (!Number.isFinite(unitAmount) || unitAmount < 50) {
@@ -91,6 +107,35 @@ export async function POST(req: Request) {
       }
     })
 
+    // ─── 5.1 Ligne TVA (si applicable) ──────────────────────
+    // Règle métier : 21% en Belgique, 0% ailleurs.
+    // On ajoute une ligne séparée "TVA 21%" pour transparence
+    // facturation (visible dans Stripe Checkout + reçu).
+    const country = (body.country && typeof body.country === 'string') ? body.country : 'BE'
+    const vatRate = getVatRate(country)
+    if (vatRate > 0) {
+      // Somme HT en centimes (on recalcule côté serveur à partir
+      // des line_items, jamais depuis le body)
+      const totalHtCents = lineItems.reduce(
+        (sum, li) => sum + li.price_data.unit_amount * li.quantity,
+        0,
+      )
+      const vatCents = Math.round(totalHtCents * vatRate)
+      if (vatCents > 0) {
+        lineItems.push({
+          quantity: 1,
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: `TVA ${(vatRate * 100).toFixed(0)}% (${country})`,
+              metadata: { order_id: order.id },
+            },
+            unit_amount: vatCents,
+          },
+        })
+      }
+    }
+
     // ─── 6. Création de la session Stripe Checkout ─────────
     const siteUrl = getSiteUrl()
     const session = await stripe.checkout.sessions.create({
@@ -104,6 +149,8 @@ export async function POST(req: Request) {
         order_ref: order.ref ?? '',
         user_id: user.id,
         billing_type: 'one_shot',
+        country,
+        vat_rate: String(vatRate),
         client_label: (order.company_name ?? order.client_name ?? '').slice(0, 100),
       },
       payment_intent_data: {
@@ -111,6 +158,8 @@ export async function POST(req: Request) {
           order_id: order.id,
           order_ref: order.ref ?? '',
           user_id: user.id,
+          country,
+          vat_rate: String(vatRate),
         },
       },
       locale: 'fr',
